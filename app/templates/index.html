@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Classification Model</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 2rem;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        .feature-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .feature-input {
+            width: 80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="text-center mb-0">Classification Model Prediction</h2>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <p>This app uses a machine learning model trained with MLflow to make binary classification predictions.</p>
+                    <p><strong>Instructions:</strong> Enter feature values (20 features required) and submit to get a prediction.</p>
+                </div>
+                
+                <form action="/predict" method="post">
+                    <h4>Enter Feature Values:</h4>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-12 feature-group">
+                            {% for i in range(20) %}
+                            <div class="mb-2">
+                                <label for="feature_{{ i }}" class="form-label">Feature {{ i }}</label>
+                                <input type="number" step="0.01" class="form-control feature-input" id="feature_{{ i }}" name="feature_{{ i }}" value="0" required>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary btn-lg">Predict</button>
+                        <button type="button" class="btn btn-secondary btn-lg" id="randomize">Randomize Values</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // JavaScript to randomize feature values
+        document.getElementById('randomize').addEventListener('click', function() {
+            for (let i = 0; i < 20; i++) {
+                const input = document.getElementById(`feature_${i}`);
+                // Generate random value between -3 and 3 (typical range after scaling)
+                input.value = (Math.random() * 6 - 3).toFixed(2);
+            }
+        });
+    </script>
+</body>
+</html> 
