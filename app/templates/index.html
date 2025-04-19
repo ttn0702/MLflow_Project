@@ -25,10 +25,103 @@
         .feature-input {
             width: 80px;
         }
+        .result-box {
+            font-size: 2rem;
+            padding: 1.5rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+            text-align: center;
+        }
+        .result-positive {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .result-negative {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .probability-bar {
+            height: 30px;
+            border-radius: 5px;
+            margin: 1rem 0;
+            background: linear-gradient(to right, #f8d7da 0%, #d4edda 100%);
+            position: relative;
+        }
+        .probability-indicator {
+            position: absolute;
+            width: 4px;
+            height: 40px;
+            background-color: #212529;
+            top: -5px;
+            transform: translateX(-2px);
+        }
+        .prediction-section {
+            display: none;
+        }
+        .prediction-section.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="header-nav mb-4">
+            <nav class="navbar navbar-expand-lg navbar-light bg-light rounded">
+                <div class="container-fluid">
+                    <a class="navbar-brand" href="/">MLflow Project</a>
+                    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                            aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="navbarNav">
+                        <ul class="navbar-nav">
+                            <li class="nav-item">
+                                <a class="nav-link active" aria-current="page" href="/">Trang chủ</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="/documentation">Tài liệu</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Hiển thị lỗi nếu có -->
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Phần hiển thị kết quả dự đoán -->
+        <div class="card prediction-section {% if has_prediction %}show{% endif %}" id="predictionSection">
+            <div class="card-header bg-primary text-white">
+                <h2 class="text-center mb-0">Prediction Result</h2>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    <h3>Classification Result:</h3>
+                    {% if has_prediction %}
+                    <div class="result-box {% if prediction == 1 %}result-positive{% else %}result-negative{% endif %}">
+                        Class {{ prediction }}
+                    </div>
+                    
+                    <h4>Prediction Probability: {{ probability }}%</h4>
+                    <div class="probability-bar">
+                        <div class="probability-indicator" id="probIndicator"></div>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>0% (Class 0)</span>
+                        <span>50%</span>
+                        <span>100% (Class 1)</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Form nhập dữ liệu -->
         <div class="card">
             <div class="card-header bg-primary text-white">
                 <h2 class="text-center mb-0">Classification Model Prediction</h2>
@@ -39,7 +132,7 @@
                     <p><strong>Instructions:</strong> Enter feature values (20 features required) and submit to get a prediction.</p>
                 </div>
                 
-                <form action="/predict" method="post">
+                <form action="/predict" method="post" id="predictionForm">
                     <h4>Enter Feature Values:</h4>
                     
                     <div class="row mb-4">
@@ -47,7 +140,8 @@
                             {% for i in range(20) %}
                             <div class="mb-2">
                                 <label for="feature_{{ i }}" class="form-label">Feature {{ i }}</label>
-                                <input type="number" step="0.01" class="form-control feature-input" id="feature_{{ i }}" name="feature_{{ i }}" value="0" required>
+                                <input type="number" step="0.01" class="form-control feature-input" id="feature_{{ i }}" name="feature_{{ i }}" 
+                                       value="{% if feature_values is defined %}{{ feature_values[i] }}{% else %}0{% endif %}" required>
                             </div>
                             {% endfor %}
                         </div>
@@ -56,6 +150,7 @@
                     <div class="text-center">
                         <button type="submit" class="btn btn-primary btn-lg">Predict</button>
                         <button type="button" class="btn btn-secondary btn-lg" id="randomize">Randomize Values</button>
+                        <button type="button" class="btn btn-info btn-lg" id="randomizePredict">Randomize & Predict</button>
                     </div>
                 </form>
             </div>
@@ -63,14 +158,37 @@
     </div>
     
     <script>
-        // JavaScript to randomize feature values
-        document.getElementById('randomize').addEventListener('click', function() {
+        // Set the indicator position based on the probability if prediction exists
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if has_prediction %}
+            const indicator = document.getElementById('probIndicator');
+            indicator.style.left = '{{ probability }}%';
+            
+            // Scroll to the prediction section
+            document.getElementById('predictionSection').scrollIntoView({ behavior: 'smooth' });
+            {% endif %}
+        });
+        
+        // Function to randomize feature values
+        function randomizeValues() {
             for (let i = 0; i < 20; i++) {
                 const input = document.getElementById(`feature_${i}`);
                 // Generate random value between -3 and 3 (typical range after scaling)
                 input.value = (Math.random() * 6 - 3).toFixed(2);
             }
+        }
+        
+        // Regular randomize button
+        document.getElementById('randomize').addEventListener('click', function() {
+            randomizeValues();
+        });
+        
+        // Randomize and predict button
+        document.getElementById('randomizePredict').addEventListener('click', function() {
+            randomizeValues();
+            document.getElementById('predictionForm').submit();
         });
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 

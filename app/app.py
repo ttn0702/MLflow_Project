@@ -1,10 +1,12 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Markup
 import numpy as np
 import joblib
 import os
 import sys
 import mlflow
 import mlflow.sklearn
+import markdown
+import codecs
 
 # Add the parent directory to the path so we can import from the parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,6 +42,21 @@ scaler = load_scaler()
 def home():
     return render_template('index.html')
 
+@app.route('/documentation')
+def documentation():
+    # Path to the ProjectDescription.md file
+    doc_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ProjectDescription.md")
+    
+    # Read the markdown file
+    with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
+        text = f.read()
+    
+    # Convert markdown to HTML
+    html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
+    
+    # Pass the HTML to the template using Markup to prevent escaping
+    return render_template('documentation.html', content=Markup(html))
+
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
@@ -48,36 +65,49 @@ def predict():
             # If JSON data
             data = request.get_json()
             features = np.array(data['features']).reshape(1, -1)
+            
+            # Scale the features
+            scaled_features = scaler.transform(features)
+            
+            # Make prediction
+            prediction = model.predict(scaled_features)[0]
+            probability = model.predict_proba(scaled_features)[0][1]
+            
+            # Return JSON response
+            return jsonify({
+                'prediction': int(prediction),
+                'probability': float(probability)
+            })
         else:
             # If form data
             features = []
             for i in range(20):  # Assuming 20 features as in the training data
                 feature_val = request.form.get(f'feature_{i}', 0)
                 features.append(float(feature_val))
-            features = np.array(features).reshape(1, -1)
-        
-        # Scale the features
-        scaled_features = scaler.transform(features)
-        
-        # Make prediction
-        prediction = model.predict(scaled_features)[0]
-        probability = model.predict_proba(scaled_features)[0][1]
-        
-        result = {
-            'prediction': int(prediction),
-            'probability': float(probability)
-        }
-        
-        # If the request is from a form, render a template
-        if not request.is_json:
-            return render_template('result.html', prediction=result['prediction'], 
-                                  probability=round(result['probability'] * 100, 2))
-        
-        # Otherwise return JSON
-        return jsonify(result)
+            
+            # Create features array for display
+            feature_values = [float(request.form.get(f'feature_{i}', 0)) for i in range(20)]
+            
+            # Scale the features
+            features_array = np.array(features).reshape(1, -1)
+            scaled_features = scaler.transform(features_array)
+            
+            # Make prediction
+            prediction = model.predict(scaled_features)[0]
+            probability = model.predict_proba(scaled_features)[0][1]
+            
+            # Return to index with prediction results
+            return render_template('index.html', 
+                                  has_prediction=True,
+                                  prediction=int(prediction), 
+                                  probability=round(probability * 100, 2),
+                                  feature_values=feature_values)
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        if request.is_json:
+            return jsonify({'error': str(e)}), 400
+        else:
+            return render_template('index.html', error=str(e))
 
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist

@@ -1,116 +1,88 @@
-# MLflow Classification Project
+# MLflow Project
 
-This project demonstrates a simple MLflow implementation for a classification task using synthetic data. It showcases model training, hyperparameter tuning, model registry, and deployment through a Flask web application.
+![MLflow Project CI/CD](https://github.com/[your-username]/MLflow_Project/workflows/MLflow%20Project%20CI/CD/badge.svg)
 
-## Project Structure
+## Giới thiệu
+
+Dự án này triển khai một quy trình MLOps hoàn chỉnh sử dụng MLflow, từ việc tạo dữ liệu tổng hợp, huấn luyện mô hình phân loại nhị phân, đánh giá và lưu trữ mô hình với MLflow, đến triển khai mô hình thông qua ứng dụng web Flask.
+
+## Tính năng
+
+- Tạo dữ liệu tổng hợp cho bài toán phân loại nhị phân
+- Huấn luyện mô hình RandomForest với điều chỉnh siêu tham số
+- Ghi lại thí nghiệm, siêu tham số và chỉ số đánh giá với MLflow
+- Trực quan hóa độ quan trọng của đặc trưng
+- Lưu trữ mô hình tốt nhất vào MLflow Model Registry
+- Triển khai mô hình thông qua ứng dụng web Flask
+- CI/CD pipeline với GitHub Actions
+
+## Cấu trúc dự án
 
 ```
 MLflow_Project/
-|-- data/              # Directory for storing generated data
-|-- models/            # Directory for storing trained models
-|-- app/               # Flask web application
-|   |-- templates/     # HTML templates for the web app
+|-- data/              # Thư mục lưu trữ dữ liệu
+|-- models/            # Thư mục lưu trữ mô hình đã huấn luyện
+|-- mlruns/            # MLflow tracking (tự động tạo)
+|-- app/               # Ứng dụng web Flask
+|   |-- templates/     # HTML templates
 |   |   |-- index.html
 |   |   |-- result.html
-|   |-- app.py         # Flask application code
-|-- train.py           # Main script for data generation and model training
-|-- run.py             # Helper script to run training, MLflow UI, and Flask app
-|-- requirements.txt   # Project dependencies
-|-- README.md          # This file
+|   |-- app.py         # Mã nguồn ứng dụng Flask
+|-- tests/             # Unit tests
+|-- .github/workflows/ # GitHub Actions CI/CD
+|-- train.py           # Script chính để tạo dữ liệu và huấn luyện mô hình
+|-- run.py             # Script hỗ trợ để chạy các thành phần khác nhau
+|-- requirements.txt   # Các gói phụ thuộc
+|-- README.md          # Tệp README
 ```
 
-## Requirements
-
-This project requires Python 3.8+ and the following packages:
-- scikit-learn
-- pandas
-- numpy
-- mlflow
-- flask
-- gunicorn
-- matplotlib
-- joblib
-
-Install all dependencies using:
+## Cài đặt
 
 ```bash
+# Clone repository
+git clone https://github.com/[your-username]/MLflow_Project.git
+cd MLflow_Project
+
+# Cài đặt dependencies
 pip install -r requirements.txt
 ```
 
-## Usage
+## Sử dụng
 
-### Quick Start
-
-The project includes a helper script (`run.py`) that simplifies running different components:
-
+Huấn luyện mô hình:
 ```bash
-# Run model training
 python run.py train
+```
 
-# Run the Flask web application
-python run.py app
-
-# Run the MLflow UI 
+Khám phá kết quả với MLflow UI:
+```bash
 python run.py ui
+```
 
-# Run everything in sequence (training, MLflow UI, then Flask app)
+Chạy ứng dụng web:
+```bash
+python run.py app
+```
+
+Chạy tất cả các thành phần:
+```bash
 python run.py all
 ```
 
-### Manual Usage
+## CI/CD với GitHub Actions
 
-If you prefer to run components individually:
+Dự án sử dụng GitHub Actions để tự động hóa các quy trình CI/CD:
 
-#### 1. Training Models and Hyperparameter Tuning
+1. **Kiểm tra linting và unit test**: Chạy kiểm tra code style với flake8 và kiểm tra đơn vị với pytest
+2. **Huấn luyện mô hình**: Tự động huấn luyện mô hình khi code được đẩy lên nhánh main/master
+3. **Triển khai ứng dụng**: Tự động triển khai ứng dụng web sau khi huấn luyện mô hình
 
-Run the training script to:
-- Generate synthetic classification data
-- Train several RandomForest classifiers with different hyperparameters
-- Track models and metrics with MLflow
-- Register the best model in the MLflow Model Registry
+Xem file `./github/workflows/mlflow-ci.yml` để biết chi tiết về cấu hình CI/CD.
 
-```bash
-python train.py
-```
+## Đóng góp
 
-#### 2. Running the Web Application
+Vui lòng đóng góp bằng cách tạo issue hoặc pull request. Mọi đóng góp đều được hoan nghênh!
 
-After training, start the Flask application to serve predictions using the best model:
+## Giấy phép
 
-```bash
-cd app
-python app.py
-```
-
-The web application will be accessible at: http://localhost:5000
-
-#### 3. Using MLflow UI
-
-You can explore the training results using the MLflow UI:
-
-```bash
-mlflow ui
-```
-
-This will start the MLflow UI at http://localhost:5000 (make sure the Flask app is not running at the same port).
-
-## Model Information
-
-The project uses a RandomForest classifier for a binary classification task. Hyperparameter tuning focuses on:
-- Number of estimators
-- Maximum depth
-- Minimum samples split
-
-Performance is evaluated using:
-- Accuracy
-- Precision
-- Recall
-- F1-score
-- ROC AUC score
-
-## Web Application
-
-The Flask web application provides a simple interface to:
-- Input feature values (20 features)
-- Get classification predictions from the best model
-- View prediction probabilities 
+Dự án này được phân phối dưới giấy phép MIT. Xem file `LICENSE` để biết thêm chi tiết. 
