@@ -10,7 +10,7 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v3
 
@@ -48,11 +48,12 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Preload artifact upload action
-      uses: actions/upload-artifact@v3.1.2
+    # Workaround to prefetch the action to prevent metadata download error
+    - name: Prefetch upload-artifact action
+      uses: actions/upload-artifact@v2
       with:
-        name: preload
-        path: dummy
+        name: dummy
+        path: dummy.txt
       continue-on-error: true
 
     - name: Install dependencies
@@ -82,7 +83,7 @@ jobs:
         ls -la artifact_bundle/
 
     - name: Upload model artifacts
-      uses: actions/upload-artifact@v3.1.2
+      uses: actions/upload-artifact@v2
       with:
         name: model-artifacts
         path: artifact_bundle/
