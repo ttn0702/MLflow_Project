@@ -27,11 +27,14 @@ jobs:
 
     - name: Lint with flake8
       run: |
+        # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Test with pytest
       run: |
+        # Create directories if they don't exist
         mkdir -p data models
         pytest -v
 
@@ -47,8 +50,19 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
+        
+    - name: Check GitHub Actions runner
+      run: |
+        echo "GitHub Actions Runner version: $ACTIONS_RUNNER_VERSION"
+        echo "GitHub Actions API URLs:"
+        curl -s -I https://api.github.com/
+        
+    - name: Create dummy file for prefetch
+      run: |
+        echo "dummy content" > dummy.txt
+        ls -la dummy.txt
 
-    # Workaround to prefetch the action to prevent metadata download error
+    # Prefetch the action to avoid download issues
     - name: Prefetch upload-artifact action
       uses: actions/upload-artifact@v2
       with:
@@ -61,10 +75,17 @@ jobs:
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
+    - name: Check GitHub connection
+      run: |
+        ping github.com -c 4
+        curl -I https://github.com/actions/upload-artifact
+
     - name: Train model
       run: |
+        # Create directories if they don't exist
         mkdir -p data models
         python train.py
+        # Debug: Check what files were created
         echo "Files in models directory:"
         ls -la models/
         echo "Files in data directory:"
@@ -73,13 +94,32 @@ jobs:
     - name: Create artifact archive
       run: |
         mkdir -p artifact_bundle
+        # Use verbose option to see what's being copied
         cp -rv models/* artifact_bundle/ || echo "No model files to copy or models directory is empty"
         cp -v data/scaler.joblib artifact_bundle/ || echo "scaler.joblib not found"
+        # If no files were copied, create a placeholder to avoid empty directory
         if [ -z "$(ls -A artifact_bundle)" ]; then
-          echo "Creating placeholder file"
+          echo "Creating placeholder file as artifact directory is empty"
           echo "placeholder" > artifact_bundle/placeholder.txt
         fi
+        # List contents of artifact bundle
         echo "Contents of artifact_bundle directory:"
+        ls -la artifact_bundle/
+
+    - name: Validate artifact bundle
+      run: |
+        if [ ! -d "artifact_bundle" ]; then
+          echo "Artifact bundle directory does not exist!"
+          mkdir -p artifact_bundle
+          echo "placeholder" > artifact_bundle/placeholder.txt
+          echo "Created artifact_bundle directory with placeholder"
+        fi
+        if [ -z "$(ls -A artifact_bundle)" ]; then
+          echo "Artifact bundle directory is empty!"
+          echo "placeholder" > artifact_bundle/placeholder.txt
+          echo "Added placeholder file to artifact_bundle"
+        fi
+        echo "Final contents of artifact_bundle:"
         ls -la artifact_bundle/
 
     - name: Upload model artifacts
@@ -102,7 +142,7 @@ jobs:
         python-version: '3.10'
 
     - name: Download model artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v2
       with:
         name: model-artifacts
         path: downloaded_artifacts
@@ -111,14 +151,20 @@ jobs:
       run: |
         mkdir -p models
         mkdir -p data
+        # Debug what was downloaded
         echo "Contents of downloaded_artifacts:"
         ls -la downloaded_artifacts/
+
+        # Copy contents with detailed output
         cp -rv downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+
+        # Check if scaler.joblib exists before moving
         if [ -f downloaded_artifacts/scaler.joblib ]; then
           mv -v downloaded_artifacts/scaler.joblib data/
         else
           echo "scaler.joblib not found in downloaded artifacts"
         fi
+
         echo "Final contents of models directory:"
         ls -la models/
         echo "Final contents of data directory:"
@@ -129,7 +175,8 @@ jobs:
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    # Example deployment step
+    # Here you would add the steps to deploy to your hosting service
+    # Example for Heroku (requires additional setup):
     # - name: Deploy to Heroku
     #   uses: akhileshns/heroku-deploy@v3.12.14
     #   with:
