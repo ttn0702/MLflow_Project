@@ -154,17 +154,8 @@ jobs:
         cp -r models/* deploy_app/models/ || echo "No model files to copy"
         cp -r data/scaler.joblib deploy_app/data/ || echo "No scaler.joblib to copy"
         
-        # Create requirements.txt if it doesn't exist
-        if [ ! -f "deploy_app/requirements.txt" ]; then
-          cat > deploy_app/requirements.txt << 'EOF'
-          flask==2.0.1
-          joblib==1.0.1
-          numpy==1.21.0
-          scikit-learn==0.24.2
-          markdown==3.3.4
-          mlflow==1.20.2
-          EOF
-        fi
+        # Copy requirements.txt if it exists in the root directory
+        cp requirements.txt deploy_app/ || echo "requirements.txt not found, skipping"
         
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@v4
