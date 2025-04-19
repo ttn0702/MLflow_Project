@@ -66,12 +66,42 @@ jobs:
         # Create directories if they don't exist
         mkdir -p data models
         python train.py
+        # Debug: Check what files were created
+        echo "Files in models directory:"
+        ls -la models/
+        echo "Files in data directory:"
+        ls -la data/
         
     - name: Create artifact archive
       run: |
         mkdir -p artifact_bundle
-        cp -r models/* artifact_bundle/ || true
-        cp data/scaler.joblib artifact_bundle/ || true
+        # Use verbose option to see what's being copied
+        cp -rv models/* artifact_bundle/ || echo "No model files to copy or models directory is empty"
+        cp -v data/scaler.joblib artifact_bundle/ || echo "scaler.joblib not found"
+        # If no files were copied, create a placeholder to avoid empty directory
+        if [ -z "$(ls -A artifact_bundle)" ]; then
+          echo "Creating placeholder file as artifact directory is empty"
+          echo "placeholder" > artifact_bundle/placeholder.txt
+        fi
+        # List contents of artifact bundle
+        echo "Contents of artifact_bundle directory:"
+        ls -la artifact_bundle/
+        
+    - name: Validate artifact bundle
+      run: |
+        if [ ! -d "artifact_bundle" ]; then
+          echo "Artifact bundle directory does not exist!"
+          mkdir -p artifact_bundle
+          echo "placeholder" > artifact_bundle/placeholder.txt
+          echo "Created artifact_bundle directory with placeholder"
+        fi
+        if [ -z "$(ls -A artifact_bundle)" ]; then
+          echo "Artifact bundle directory is empty!"
+          echo "placeholder" > artifact_bundle/placeholder.txt
+          echo "Added placeholder file to artifact_bundle"
+        fi
+        echo "Final contents of artifact_bundle:"
+        ls -la artifact_bundle/
         
     - name: Upload model artifacts
       uses: actions/upload-artifact@v3
@@ -102,9 +132,23 @@ jobs:
       run: |
         mkdir -p models
         mkdir -p data
-        cp -r downloaded_artifacts/* models/ || true
-        mv downloaded_artifacts/scaler.joblib data/ || true
+        # Debug what was downloaded
+        echo "Contents of downloaded_artifacts:"
+        ls -la downloaded_artifacts/
+        
+        # Copy contents with detailed output
+        cp -rv downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+        
+        # Check if scaler.joblib exists before moving
+        if [ -f downloaded_artifacts/scaler.joblib ]; then
+          mv -v downloaded_artifacts/scaler.joblib data/
+        else
+          echo "scaler.joblib not found in downloaded artifacts"
+        fi
+        
+        echo "Final contents of models directory:"
         ls -la models/
+        echo "Final contents of data directory:"
         ls -la data/
         
     - name: Install dependencies
