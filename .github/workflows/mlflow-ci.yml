@@ -150,6 +150,30 @@ jobs:
         cp -r models/* deploy_app/models/ || echo "No model files to copy"
         cp -r data/scaler.joblib deploy_app/data/ || echo "No scaler.joblib to copy"
         
+        # Ensure there's an index.html file at the root
+        if [ ! -f "deploy_app/index.html" ]; then
+          if [ -f "deploy_app/templates/index.html" ]; then
+            cp deploy_app/templates/index.html deploy_app/
+          else
+            # Create a simple index.html
+            cat > deploy_app/index.html << EOF
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MLflow Project</title>
+    <meta http-equiv="refresh" content="0; URL='app/templates/index.html'" />
+</head>
+<body>
+    <p>If you are not redirected, <a href="app/templates/index.html">click here</a>.</p>
+</body>
+</html>
+EOF
+          fi
+        fi
+        
+        # Create a .nojekyll file to disable Jekyll processing
+        touch deploy_app/.nojekyll
+        
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@v4
       with:
