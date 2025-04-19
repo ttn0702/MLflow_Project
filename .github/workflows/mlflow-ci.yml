@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -44,18 +44,25 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
         
-    - name: Check GitHub Actions runner
+    - name: Check GitHub Actions runner environment
       run: |
-        echo "GitHub Actions Runner version: $ACTIONS_RUNNER_VERSION"
-        echo "GitHub Actions API URLs:"
-        curl -s -I https://api.github.com/
+        echo "GitHub Actions Runner environment:"
+        echo "GITHUB_API_URL: $GITHUB_API_URL"
+        echo "RUNNER_OS: $RUNNER_OS"
+        curl -s https://api.github.com/meta | grep "api"
+        
+    - name: Check network connectivity
+      run: |
+        echo "Checking network connectivity..."
+        curl -s -o /dev/null -w "HTTP Status Code for github.com: %{http_code}\n" https://github.com
+        curl -s -o /dev/null -w "HTTP Status Code for api.github.com: %{http_code}\n" https://api.github.com
         
     - name: Create dummy file for prefetch
       run: |
@@ -68,17 +75,13 @@ jobs:
       with:
         name: dummy
         path: dummy.txt
+        retention-days: 1
       continue-on-error: true
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-    - name: Check GitHub connection
-      run: |
-        ping github.com -c 4
-        curl -I https://github.com/actions/upload-artifact
 
     - name: Train model
       run: |
@@ -127,6 +130,7 @@ jobs:
       with:
         name: model-artifacts
         path: artifact_bundle/
+        retention-days: 5
 
   deploy-web-app:
     runs-on: ubuntu-latest
@@ -134,7 +138,7 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -142,7 +146,7 @@ jobs:
         python-version: '3.10'
 
     - name: Download model artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v4
       with:
         name: model-artifacts
         path: downloaded_artifacts
