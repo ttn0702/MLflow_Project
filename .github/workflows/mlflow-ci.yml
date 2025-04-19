@@ -62,13 +62,17 @@ jobs:
         mkdir -p data models
         python train.py
         
+    - name: Create artifact archive
+      run: |
+        mkdir -p artifact_bundle
+        cp -r models/* artifact_bundle/ || true
+        cp data/scaler.joblib artifact_bundle/ || true
+        
     - name: Upload model artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v3.1.2
       with:
         name: model-artifacts
-        path: |
-          models/
-          data/scaler.joblib
+        path: artifact_bundle/
           
   deploy-web-app:
     runs-on: ubuntu-latest
@@ -84,9 +88,19 @@ jobs:
         python-version: '3.10'
         
     - name: Download model artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v3.1.2
       with:
         name: model-artifacts
+        path: downloaded_artifacts
+        
+    - name: Setup artifacts
+      run: |
+        mkdir -p models
+        mkdir -p data
+        cp -r downloaded_artifacts/* models/ || true
+        mv downloaded_artifacts/scaler.joblib data/ || true
+        ls -la models/
+        ls -la data/
         
     - name: Install dependencies
       run: |
@@ -100,4 +114,10 @@ jobs:
     #   with:
     #     heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
     #     heroku_app_name: "your-app-name"
-    #     heroku_email: ${{ secrets.HEROKU_EMAIL }} 
+    #     heroku_email: ${{ secrets.HEROKU_EMAIL }}
+
+    # Kiểm tra kết nối với GitHub
+    - name: Check GitHub connection
+      run: |
+        ping github.com
+        curl -I https://api.github.com 
