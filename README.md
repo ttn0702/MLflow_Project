@@ -1,6 +1,6 @@
 # MLflow Project
 
-![MLflow Project CI/CD](https://github.com/[your-username]/MLflow_Project/workflows/MLflow%20Project%20CI/CD/badge.svg)
+![MLflow Project CI/CD](https://github.com/ttn0702/MLflow_Project/workflows/MLflow%20Project%20CI/CD/badge.svg)
 
 ## Giới thiệu
 

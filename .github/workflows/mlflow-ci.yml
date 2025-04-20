@@ -150,6 +150,9 @@ jobs:
         cp -r app/* huggingface_app/ || echo "Error copying app files"
         cp requirements.txt huggingface_app/ || echo "requirements.txt not found, skipping"
         
+        # Copy documentation file for reference
+        cp ProjectDescription.md huggingface_app/ || echo "ProjectDescription.md not found, skipping"
+        
         # Create and set proper permissions for model and data directories
         mkdir -p huggingface_app/models
         mkdir -p huggingface_app/data
