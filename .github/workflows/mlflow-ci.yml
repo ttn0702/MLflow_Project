@@ -173,6 +173,36 @@ jobs:
             echo "*.pkl filter=lfs diff=lfs merge=lfs -text" >> huggingface_app/.gitattributes
           fi
         fi
+        
+        # Copy README.md for Hugging Face Space
+        if [ -f "config/huggingface/README.md" ]; then
+          echo "Using existing README.md from config/huggingface/"
+          cp config/huggingface/README.md huggingface_app/
+        elif [ -f ".github/hf_templates/README.md" ]; then
+          echo "Using README.md from .github/hf_templates/"
+          cp .github/hf_templates/README.md huggingface_app/
+        else
+          echo "No README.md template found. Please create one in config/huggingface/README.md"
+          echo "Creating a basic README.md with required Hugging Face configuration"
+          cat > huggingface_app/README.md << EOF
+---
+title: MLflow Project App
+emoji: 🧪
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+sdk_version: 3.12.0
+app_port: 7860
+pinned: false
+---
+
+# MLflow Project Web App
+
+This is a Flask web application for the MLflow Project, deployed on Hugging Face Spaces.
+
+Please update this README.md by creating your own in config/huggingface/README.md
+EOF
+        fi
 
     - name: Deploy to Hugging Face
       env:
@@ -230,7 +260,7 @@ jobs:
         # Create or update Hugging Face Space
         if [ "$SPACE_EXISTS" -eq "0" ]; then
           echo "Creating new Hugging Face Space: $HF_USERNAME/mlflow-project-app"
-          huggingface-cli repo create mlflow-project-app --type space --space-sdk gradio
+          huggingface-cli repo create mlflow-project-app --type space --space-sdk docker
         else
           echo "Space already exists, will update it: $HF_USERNAME/mlflow-project-app"
         fi
