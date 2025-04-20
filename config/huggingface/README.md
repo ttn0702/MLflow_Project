@@ -7,11 +7,16 @@ sdk: docker
 sdk_version: 3.12.0
 app_port: 7860
 pinned: false
+tags:
+  - huggingface
+  - mlflow
+  - flask
+  - machine-learning
 ---
 
 # MLflow Project Web App
 
-This is a Flask web application for the MLflow Project, deployed on Hugging Face Spaces.
+This is a Flask web application for the MLflow Project, deployed on [@huggingface](https://huggingface.co) Spaces.
 
 ## Features:
 - Machine Learning model trained with MLflow

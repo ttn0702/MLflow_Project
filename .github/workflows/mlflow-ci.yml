@@ -148,60 +148,20 @@ jobs:
         cp -r models/* huggingface_app/models/ || echo "No model files to copy"
         cp -r data/scaler.joblib huggingface_app/data/ || echo "No scaler.joblib to copy"
         
-        # Copy Hugging Face specific files from config directory if they exist
+        # Copy Hugging Face config files
         if [ -d "config/huggingface" ]; then
-          echo "Using existing Hugging Face config files"
+          echo "Using existing Hugging Face config files from config/huggingface/"
           cp -r config/huggingface/* huggingface_app/
         else
-          echo "Hugging Face config files not found, copying defaults"
-          # Copy default config files from .github/hf_templates if they exist
+          echo "No config files found in config/huggingface/, using default templates"
+          # Use default templates from .github/hf_templates if available
           if [ -d ".github/hf_templates" ]; then
+            echo "Using templates from .github/hf_templates/"
             cp -r .github/hf_templates/* huggingface_app/
           else
-            echo "No Hugging Face templates found. Creating minimal configuration."
-            # Create minimal Dockerfile
-            echo "FROM python:3.10-slim" > huggingface_app/Dockerfile
-            echo "WORKDIR /app" >> huggingface_app/Dockerfile
-            echo "COPY requirements.txt ." >> huggingface_app/Dockerfile
-            echo "RUN pip install --no-cache-dir -r requirements.txt" >> huggingface_app/Dockerfile
-            echo "RUN pip install gunicorn" >> huggingface_app/Dockerfile
-            echo "COPY . ." >> huggingface_app/Dockerfile
-            echo 'CMD ["gunicorn", "--bind", "0.0.0.0:7860", "app:app"]' >> huggingface_app/Dockerfile
-            
-            # Create minimal .gitattributes for LFS
-            echo "*.joblib filter=lfs diff=lfs merge=lfs -text" > huggingface_app/.gitattributes
-            echo "*.pkl filter=lfs diff=lfs merge=lfs -text" >> huggingface_app/.gitattributes
+            echo "No template files found. Please add config files to config/huggingface/ directory"
+            exit 1
           fi
-        fi
-        
-        # Copy README.md for Hugging Face Space
-        if [ -f "config/huggingface/README.md" ]; then
-          echo "Using existing README.md from config/huggingface/"
-          cp config/huggingface/README.md huggingface_app/
-        elif [ -f ".github/hf_templates/README.md" ]; then
-          echo "Using README.md from .github/hf_templates/"
-          cp .github/hf_templates/README.md huggingface_app/
-        else
-          echo "No README.md template found. Please create one in config/huggingface/README.md"
-          echo "Creating a basic README.md with required Hugging Face configuration"
-          cat > huggingface_app/README.md << 'EOFMARKER'
----
-title: MLflow Project App
-emoji: 🧪
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-sdk_version: 3.12.0
-app_port: 7860
-pinned: false
----
-
-# MLflow Project Web App
-
-This is a Flask web application for the MLflow Project, deployed on Hugging Face Spaces.
-
-Please update this README.md by creating your own in config/huggingface/README.md
-EOFMARKER
         fi
 
     - name: Deploy to Hugging Face
