@@ -53,6 +53,7 @@ flask==2.3.3
 gunicorn==21.2.0
 matplotlib==3.7.2
 joblib==1.3.2
+markdown==3.4.3
 ```
 
 ## 3. Triển khai - Tạo và xử lý dữ liệu
@@ -272,50 +273,102 @@ Quá trình này:
 Tôi đã phát triển một ứng dụng web Flask để phục vụ dự đoán từ mô hình tốt nhất:
 
 ```python
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Markup
 import numpy as np
 import joblib
 import os
 import sys
-import mlflow
-import mlflow.sklearn
+import markdown
+import codecs
 
 app = Flask(__name__)
 
 # Tải mô hình từ MLflow hoặc tệp cục bộ
 def load_model():
     try:
-        # Tải từ MLflow model registry
-        mlflow.set_tracking_uri("file:../mlruns")
-        model = mlflow.sklearn.load_model("models:/BestClassificationModel/latest")
-        print("Loaded model from MLflow model registry")
+        # Tìm kiếm mô hình trong nhiều vị trí
+        model_path = os.path.join("models", "best_model.joblib")
+        if os.path.exists(model_path):
+            model = joblib.load(model_path)
+            print(f"Loaded model from {model_path}")
+            return model
+            
+        # Nếu không tìm thấy, thử các đường dẫn thay thế
+        alternative_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "best_model.joblib"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "best_model.joblib"),
+            "/app/models/best_model.joblib"  # Đường dẫn cho Docker container
+        ]
+        
+        for path in alternative_paths:
+            if os.path.exists(path):
+                model = joblib.load(path)
+                print(f"Loaded model from {path}")
+                return model
+                
+        raise FileNotFoundError(f"Model file not found in any of the expected locations")
     except Exception as e:
-        print(f"Failed to load model from MLflow registry: {e}")
-        # Sử dụng mô hình cục bộ nếu thất bại
-        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "best_model.joblib")
-        model = joblib.load(model_path)
-        print("Loaded model from local file")
-    
-    return model
+        print(f"Error loading model: {e}")
+        raise
 
 # Tải bộ chuẩn hóa
 def load_scaler():
-    scaler_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scaler.joblib")
-    return joblib.load(scaler_path)
+    try:
+        # Tương tự như mô hình, tìm kiếm bộ chuẩn hóa ở nhiều vị trí
+        scaler_path = os.path.join("data", "scaler.joblib")
+        if os.path.exists(scaler_path):
+            return joblib.load(scaler_path)
+            
+        alternative_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scaler.joblib"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "scaler.joblib"),
+            "/app/data/scaler.joblib"
+        ]
+        
+        for path in alternative_paths:
+            if os.path.exists(path):
+                return joblib.load(path)
+                
+        raise FileNotFoundError(f"Scaler file not found in any of the expected locations")
+    except Exception as e:
+        print(f"Error loading scaler: {e}")
+        raise
 
 # Tải mô hình và bộ chuẩn hóa khi khởi động
-model = load_model()
-scaler = load_scaler()
+try:
+    model = load_model()
+    scaler = load_scaler()
+    print("Successfully loaded model and scaler")
+except Exception as e:
+    print(f"Failed to load model or scaler: {e}")
 ```
 
-### 7.2. Tạo API endpoint
+### 7.2. Tạo API endpoints
 
-Tôi đã tạo hai endpoints chính:
+Tôi đã tạo ba endpoints chính:
 
 ```python
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/documentation')
+def documentation():
+    # Đường dẫn đến file ProjectDescription.md
+    doc_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ProjectDescription.md")
+    
+    # Đọc file markdown
+    try:
+        with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
+            text = f.read()
+        
+        # Chuyển đổi markdown sang HTML
+        html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
+    except Exception as e:
+        html = f"<h1>Documentation Not Available</h1><p>Error: {str(e)}</p>"
+    
+    # Truyền HTML vào template
+    return render_template('documentation.html', content=Markup(html))
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -331,6 +384,9 @@ def predict():
             for i in range(20):  # Giả sử 20 đặc trưng như dữ liệu huấn luyện
                 feature_val = request.form.get(f'feature_{i}', 0)
                 features.append(float(feature_val))
+            
+            # Tạo mảng để hiển thị
+            feature_values = [float(request.form.get(f'feature_{i}', 0)) for i in range(20)]
             features = np.array(features).reshape(1, -1)
         
         # Chuẩn hóa đặc trưng
@@ -340,36 +396,48 @@ def predict():
         prediction = model.predict(scaled_features)[0]
         probability = model.predict_proba(scaled_features)[0][1]
         
-        result = {
+        # Nếu yêu cầu từ form, hiển thị kết quả trong index.html
+        if not request.is_json:
+            return render_template('index.html', 
+                                 has_prediction=True,
+                                 prediction=int(prediction), 
+                                 probability=round(probability * 100, 2),
+                                 feature_values=feature_values)
+        
+        # Nếu yêu cầu API, trả về JSON
+        return jsonify({
             'prediction': int(prediction),
             'probability': float(probability)
-        }
-        
-        # Nếu yêu cầu từ form, trả về template
-        if not request.is_json:
-            return render_template('result.html', prediction=result['prediction'], 
-                                  probability=round(result['probability'] * 100, 2))
-        
-        # Ngược lại trả về JSON
-        return jsonify(result)
+        })
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        # Xử lý lỗi
+        if request.is_json:
+            return jsonify({'error': str(e)}), 400
+        else:
+            return render_template('index.html', error=str(e))
 ```
 
 ### 7.3. Phát triển giao diện người dùng
 
-Tôi đã thiết kế hai template HTML cho ứng dụng:
+Tôi đã thiết kế ba template HTML cho ứng dụng:
 
-1. **index.html** - Form nhập liệu:
+1. **index.html** - Trang chính:
    - Hiển thị form với 20 trường đầu vào cho các đặc trưng
    - Nút ngẫu nhiên hóa để tạo giá trị ngẫu nhiên
-   - Hiện thị hướng dẫn và thông tin về ứng dụng
-
-2. **result.html** - Trang kết quả:
-   - Hiển thị kết quả phân loại (Lớp 0 hoặc Lớp 1)
+   - Hiển thị kết quả dự đoán trực tiếp trên cùng trang khi gửi form
    - Thanh tiến trình trực quan hiển thị xác suất dự đoán
-   - Nút để quay lại và thực hiện dự đoán mới
+
+2. **documentation.html** - Trang tài liệu:
+   - Hiển thị nội dung file ProjectDescription.md được chuyển đổi từ markdown sang HTML
+   - Cung cấp hướng dẫn chi tiết về kiến trúc và cách sử dụng dự án
+   - Tích hợp định dạng mã nguồn và bảng biểu từ markdown
+
+3. **result.html** - Trang kết quả dự phòng:
+   - Template này được tạo ra như một tùy chọn thay thế cho hiển thị kết quả
+   - Có cấu trúc tương tự phần kết quả trong index.html nhưng dưới dạng trang riêng biệt
+   - Hiện tại chưa được sử dụng trong ứng dụng vì kết quả được hiển thị trực tiếp trên index.html
+   - Được giữ lại cho mục đích mở rộng trong tương lai hoặc chuyển sang mô hình hiển thị trang kết quả riêng
 
 ## 8. Tạo script chạy dự án (run.py)
 
@@ -472,6 +540,28 @@ MLflow UI (http://localhost:5001) cho phép:
 - Giao diện trực quan dễ sử dụng
 - Khả năng nhập hoặc ngẫu nhiên hóa các giá trị đặc trưng
 - Kết quả phân loại (0 hoặc 1) với biểu diễn trực quan về xác suất
+- Tài liệu dự án đầy đủ có thể truy cập qua đường dẫn /documentation
+
+Giao diện được thiết kế theo mô hình Single Page Application, với form nhập liệu và kết quả dự đoán được hiển thị trên cùng một trang, giúp người dùng dễ dàng điều chỉnh dữ liệu đầu vào và xem kết quả ngay lập tức.
+
+Ngoài ra, ứng dụng cung cấp API endpoint cho phép tích hợp với các hệ thống khác, thông qua giao thức HTTP với định dạng JSON:
+
+```
+POST /predict
+Content-Type: application/json
+
+{
+  "features": [0.1, 0.2, 0.3, ..., 0.0]  # Mảng 20 giá trị đặc trưng
+}
+```
+
+Phản hồi:
+```
+{
+  "prediction": 1,               # Lớp dự đoán (0 hoặc 1)
+  "probability": 0.832           # Xác suất thuộc lớp 1
+}
+```
 
 ## 10. Hướng dẫn sử dụng dự án
 
@@ -554,8 +644,8 @@ jobs:
   train-model:
     # Job huấn luyện mô hình
     
-  deploy-web-app:
-    # Job triển khai ứng dụng web
+  deploy-to-huggingface:
+    # Job triển khai ứng dụng lên Hugging Face
 ```
 
 ### 12.2. Kiểm tra mã nguồn và unit tests
@@ -567,7 +657,7 @@ lint-and-test:
   runs-on: ubuntu-latest
   
   steps:
-  - uses: actions/checkout@v3
+  - uses: actions/checkout@v4
   
   - name: Set up Python
     uses: actions/setup-python@v4
@@ -610,13 +700,13 @@ train-model:
   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
   
   steps:
-  - uses: actions/checkout@v3
+  - uses: actions/checkout@v4
   
   - name: Set up Python
     uses: actions/setup-python@v4
     with:
       python-version: '3.10'
-      
+        
   - name: Install dependencies
     run: |
       python -m pip install --upgrade pip
@@ -628,27 +718,33 @@ train-model:
       mkdir -p data models
       python train.py
       
+  - name: Create artifact archive
+    run: |
+      mkdir -p artifact_bundle
+      # Copy model files and scaler
+      cp -r models/* artifact_bundle/ || echo "No model files to copy"
+      cp data/scaler.joblib artifact_bundle/ || echo "scaler.joblib not found"
+      
   - name: Upload model artifacts
-    uses: actions/upload-artifact@v3
+    uses: actions/upload-artifact@v4
     with:
       name: model-artifacts
-      path: |
-        models/
-        data/scaler.joblib
+      path: artifact_bundle/
+      retention-days: 5
 ```
 
 ### 12.4. Triển khai ứng dụng tự động
 
-Job thứ ba (`deploy-web-app`) triển khai ứng dụng web với mô hình đã huấn luyện:
+Job thứ ba (`deploy-to-huggingface`) triển khai ứng dụng lên nền tảng Hugging Face với mô hình đã huấn luyện:
 
 ```yaml
-deploy-web-app:
+deploy-to-huggingface:
   runs-on: ubuntu-latest
   needs: train-model
   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
   
   steps:
-  - uses: actions/checkout@v3
+  - uses: actions/checkout@v4
   
   - name: Set up Python
     uses: actions/setup-python@v4
@@ -656,17 +752,45 @@ deploy-web-app:
       python-version: '3.10'
       
   - name: Download model artifacts
-    uses: actions/download-artifact@v3
+    uses: actions/download-artifact@v4
     with:
       name: model-artifacts
+      path: downloaded_artifacts
+      
+  - name: Setup artifacts 
+    run: |
+      # Copy model files to appropriate directories
+      mkdir -p models data
+      cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+      if [ -f downloaded_artifacts/scaler.joblib ]; then
+        mv downloaded_artifacts/scaler.joblib data/
+      fi
       
   - name: Install dependencies
     run: |
       python -m pip install --upgrade pip
       if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      pip install huggingface_hub
+      
+  - name: Prepare deployment for Hugging Face
+    run: |
+      # Create a directory for deployment
+      mkdir -p huggingface_app
+      
+      # Copy app and requirements
+      cp -r app/* huggingface_app/ || echo "Error copying app files"
+      cp requirements.txt huggingface_app/ || echo "requirements.txt not found, skipping"
+      
+      # Create and set proper permissions for model and data directories
+      mkdir -p huggingface_app/models
+      mkdir -p huggingface_app/data
+      
+      # Copy model and scaler files
+      cp -r models/* huggingface_app/models/ || echo "No model files to copy"
+      cp -r data/scaler.joblib huggingface_app/data/ || echo "No scaler.joblib to copy"
 ```
 
-Phần triển khai lên dịch vụ cloud có thể được bổ sung dựa trên nhu cầu cụ thể (ví dụ: Heroku, AWS, GCP, Azure).
+Phần triển khai lên Hugging Face tận dụng khả năng của nền tảng này để hosting các ứng dụng machine learning phục vụ demo và chia sẻ kết quả dự án.
 
 ### 12.5. Lợi ích của CI/CD trong MLOps
 
