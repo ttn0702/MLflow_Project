@@ -99,14 +99,11 @@ jobs:
         path: artifact_bundle/
         retention-days: 5
 
-  deploy-web-app:
+  deploy-to-huggingface:
     runs-on: ubuntu-latest
     needs: train-model
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    # Cấp quyền ghi cho job
-    permissions:
-      contents: write
-
+    
     steps:
     - uses: actions/checkout@v4
 
@@ -123,7 +120,7 @@ jobs:
 
     - name: Setup artifacts 
       run: |
-        # Maintain the original project structure for models and data
+        # Copy model files to appropriate directories
         mkdir -p models data
         cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
         if [ -f downloaded_artifacts/scaler.joblib ]; then
@@ -134,49 +131,97 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install huggingface_hub
 
-    - name: Prepare web app for GitHub Pages
+    - name: Prepare deployment for Hugging Face
       run: |
-        # Create a directory for web deployment
-        mkdir -p deploy_app
+        # Create a directory for deployment
+        mkdir -p huggingface_app
         
         # Copy app and requirements
-        cp -r app/* deploy_app/ || echo "Error copying app files"
-        cp requirements.txt deploy_app/ || echo "requirements.txt not found, skipping"
+        cp -r app/* huggingface_app/ || echo "Error copying app files"
+        cp requirements.txt huggingface_app/ || echo "requirements.txt not found, skipping"
         
         # Copy models and data
-        mkdir -p deploy_app/models
-        mkdir -p deploy_app/data
-        cp -r models/* deploy_app/models/ || echo "No model files to copy"
-        cp -r data/scaler.joblib deploy_app/data/ || echo "No scaler.joblib to copy"
+        mkdir -p huggingface_app/models
+        mkdir -p huggingface_app/data
+        cp -r models/* huggingface_app/models/ || echo "No model files to copy"
+        cp -r data/scaler.joblib huggingface_app/data/ || echo "No scaler.joblib to copy"
         
-        # Ensure there's an index.html file at the root
-        if [ ! -f "deploy_app/index.html" ]; then
-          if [ -f "deploy_app/templates/index.html" ]; then
-            cp deploy_app/templates/index.html deploy_app/
+        # Copy Hugging Face specific files from config directory if they exist
+        if [ -d "config/huggingface" ]; then
+          echo "Using existing Hugging Face config files"
+          cp -r config/huggingface/* huggingface_app/
+        else
+          echo "Hugging Face config files not found, copying defaults"
+          # Copy default config files from .github/hf_templates if they exist
+          if [ -d ".github/hf_templates" ]; then
+            cp -r .github/hf_templates/* huggingface_app/
           else
-            # Create a simple index.html
-            cat > deploy_app/index.html << EOF
-<!DOCTYPE html>
-<html>
-<head>
-    <title>MLflow Project</title>
-    <meta http-equiv="refresh" content="0; URL='app/templates/index.html'" />
-</head>
-<body>
-    <p>If you are not redirected, <a href="app/templates/index.html">click here</a>.</p>
-</body>
-</html>
-EOF
+            echo "No Hugging Face templates found. Creating minimal configuration."
+            # Create minimal Dockerfile
+            echo "FROM python:3.10-slim" > huggingface_app/Dockerfile
+            echo "WORKDIR /app" >> huggingface_app/Dockerfile
+            echo "COPY requirements.txt ." >> huggingface_app/Dockerfile
+            echo "RUN pip install --no-cache-dir -r requirements.txt" >> huggingface_app/Dockerfile
+            echo "RUN pip install gunicorn" >> huggingface_app/Dockerfile
+            echo "COPY . ." >> huggingface_app/Dockerfile
+            echo 'CMD ["gunicorn", "--bind", "0.0.0.0:7860", "app:app"]' >> huggingface_app/Dockerfile
+            
+            # Create minimal .gitattributes for LFS
+            echo "*.joblib filter=lfs diff=lfs merge=lfs -text" > huggingface_app/.gitattributes
+            echo "*.pkl filter=lfs diff=lfs merge=lfs -text" >> huggingface_app/.gitattributes
           fi
         fi
+
+    - name: Deploy to Hugging Face
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        HF_USERNAME: ${{ secrets.HF_USERNAME }}
+      run: |
+        # Install Hugging Face CLI
+        pip install huggingface_hub
         
-        # Create a .nojekyll file to disable Jekyll processing
-        touch deploy_app/.nojekyll
+        # Configure Git for Hugging Face
+        git config --global user.email "${{ secrets.EMAIL_HUGGINGFACE }}"
+        git config --global user.name "${{ secrets.USERNAME_HUGGINGFACE }}"
         
-    - name: Deploy to GitHub Pages
-      uses: JamesIves/github-pages-deploy-action@v4
-      with:
-        folder: deploy_app
-        branch: gh-pages
-        token: ${{ secrets.GITHUB_TOKEN }}
+        # Login to Hugging Face using CLI
+        echo "Logging in to Hugging Face..."
+        huggingface-cli login --token $HF_TOKEN
+        
+        # Check if the HF_USERNAME is set
+        if [ -z "$HF_USERNAME" ]; then
+          echo "Error: HF_USERNAME is not set in repository secrets!"
+          exit 1
+        fi
+        
+        # Check if Space already exists
+        echo "Checking if Space already exists..."
+        SPACE_EXISTS=$(huggingface-cli repo list --spaces --output json | grep -c "\"$HF_USERNAME/mlflow-project-app\"" || echo "0")
+        
+        # Initialize Git repository in the huggingface_app directory
+        cd huggingface_app
+        git init
+        git add .
+        git commit -m "Deploy MLflow Project to Hugging Face Spaces"
+        
+        # Create or update Hugging Face Space
+        if [ "$SPACE_EXISTS" -eq "0" ]; then
+          echo "Creating new Hugging Face Space: $HF_USERNAME/mlflow-project-app"
+          huggingface-cli repo create mlflow-project-app --type space --space-sdk gradio
+        else
+          echo "Space already exists, will update it: $HF_USERNAME/mlflow-project-app"
+        fi
+        
+        # Setup remote and push
+        echo "Setting up Git remote and pushing to Hugging Face..."
+        if git remote | grep -q "^origin$"; then
+          git remote set-url origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-app"
+        else
+          git remote add origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-app"
+        fi
+        
+        # Push with token authentication
+        echo "Pushing to Hugging Face Space..."
+        git push -f "https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/mlflow-project-app" main
