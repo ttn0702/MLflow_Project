@@ -179,8 +179,9 @@ jobs:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
         HF_USERNAME: ${{ secrets.HF_USERNAME }}
       run: |
-        # Install Hugging Face CLI
+        # Install required tools
         pip install huggingface_hub
+        apt-get update && apt-get install -y git-lfs
         
         # Configure Git for Hugging Face
         git config --global user.email "${{ secrets.EMAIL_HUGGINGFACE }}"
@@ -204,10 +205,25 @@ jobs:
         cd huggingface_app
         git init
         
+        # Setup Git LFS
+        git lfs install
+        
+        # Setup LFS tracking patterns for binary files
+        echo "Setting up Git LFS tracking patterns..."
+        git lfs track "*.joblib"
+        git lfs track "*.pkl"
+        git lfs track "*.h5"
+        git lfs track "*.onnx"
+        git lfs track "*.bin"
+        
+        # Make sure .gitattributes is tracked
+        git add .gitattributes
+        
         # Create initial branch with correct name
         git checkout -b main
         
         # Add files and commit
+        echo "Adding files to Git repository..."
         git add .
         git commit -m "Deploy MLflow Project to Hugging Face Spaces"
         
