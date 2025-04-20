@@ -126,6 +126,14 @@ jobs:
         if [ -f downloaded_artifacts/scaler.joblib ]; then
           mv downloaded_artifacts/scaler.joblib data/
         fi
+        
+        # Debug - Show what files were downloaded
+        echo "Downloaded artifact contents:"
+        ls -la downloaded_artifacts/
+        
+        # Debug - Show where model files are now
+        echo "Models directory contents:"
+        ls -la models/
 
     - name: Install dependencies
       run: |
@@ -142,11 +150,38 @@ jobs:
         cp -r app/* huggingface_app/ || echo "Error copying app files"
         cp requirements.txt huggingface_app/ || echo "requirements.txt not found, skipping"
         
-        # Copy models and data
+        # Create and set proper permissions for model and data directories
         mkdir -p huggingface_app/models
         mkdir -p huggingface_app/data
-        cp -r models/* huggingface_app/models/ || echo "No model files to copy"
+        chmod -R 755 huggingface_app/models
+        chmod -R 755 huggingface_app/data
+        
+        # Rename model file if it exists with a different name
+        if [ -f models/model.joblib ]; then
+          cp models/model.joblib huggingface_app/models/best_model.joblib
+        elif [ -f models/best_model.pkl ]; then
+          cp models/best_model.pkl huggingface_app/models/best_model.joblib
+        else
+          # Copy all model files to ensure we get the right one
+          cp -r models/* huggingface_app/models/ || echo "No model files to copy"
+          
+          # Create a placeholder model if no model exists (for testing)
+          if [ -z "$(ls -A huggingface_app/models)" ]; then
+            echo "No model files found. Creating placeholder model file."
+            echo "Placeholder model" > huggingface_app/models/best_model.joblib
+          fi
+        fi
+        
+        # Copy scaler
         cp -r data/scaler.joblib huggingface_app/data/ || echo "No scaler.joblib to copy"
+        
+        # Debug - Show what will be deployed
+        echo "Hugging Face app contents:"
+        ls -la huggingface_app/
+        echo "Models in Hugging Face app:"
+        ls -la huggingface_app/models/ || echo "No models directory"
+        echo "Data in Hugging Face app:"
+        ls -la huggingface_app/data/ || echo "No data directory"
         
         # Copy Hugging Face config files
         if [ -d "config/huggingface" ]; then

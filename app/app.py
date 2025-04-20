@@ -3,8 +3,6 @@ import numpy as np
 import joblib
 import os
 import sys
-import mlflow
-import mlflow.sklearn
 import markdown
 import codecs
 
@@ -13,30 +11,67 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 app = Flask(__name__)
 
-# Load the model from MLflow or from the local file
+# Load the model from local file
 def load_model():
     try:
-        # Try to load from MLflow model registry
-        mlflow.set_tracking_uri("file:../mlruns")
-        model = mlflow.sklearn.load_model("models:/BestClassificationModel/latest")
-        print("Loaded model from MLflow model registry")
+        # First try to load model from the current directory structure
+        model_path = os.path.join("models", "best_model.joblib")
+        if os.path.exists(model_path):
+            model = joblib.load(model_path)
+            print(f"Loaded model from {model_path}")
+            return model
+            
+        # If not found, try alternative paths
+        alternative_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "best_model.joblib"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "best_model.joblib"),
+            "/app/models/best_model.joblib"  # Docker container path
+        ]
+        
+        for path in alternative_paths:
+            if os.path.exists(path):
+                model = joblib.load(path)
+                print(f"Loaded model from {path}")
+                return model
+                
+        raise FileNotFoundError(f"Model file not found in any of the expected locations: {[model_path] + alternative_paths}")
     except Exception as e:
-        print(f"Failed to load model from MLflow registry: {e}")
-        # Fallback to local model file
-        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "best_model.joblib")
-        model = joblib.load(model_path)
-        print("Loaded model from local file")
-    
-    return model
+        print(f"Error loading model: {e}")
+        raise
 
 # Load the scaler
 def load_scaler():
-    scaler_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scaler.joblib")
-    return joblib.load(scaler_path)
+    try:
+        # First try to load scaler from the current directory structure
+        scaler_path = os.path.join("data", "scaler.joblib")
+        if os.path.exists(scaler_path):
+            return joblib.load(scaler_path)
+            
+        # If not found, try alternative paths
+        alternative_paths = [
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "scaler.joblib"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "scaler.joblib"),
+            "/app/data/scaler.joblib"  # Docker container path
+        ]
+        
+        for path in alternative_paths:
+            if os.path.exists(path):
+                return joblib.load(path)
+                
+        raise FileNotFoundError(f"Scaler file not found in any of the expected locations: {[scaler_path] + alternative_paths}")
+    except Exception as e:
+        print(f"Error loading scaler: {e}")
+        raise
 
 # Load model and scaler on startup
-model = load_model()
-scaler = load_scaler()
+try:
+    model = load_model()
+    scaler = load_scaler()
+    print("Successfully loaded model and scaler")
+except Exception as e:
+    print(f"Failed to load model or scaler: {e}")
+    # Don't raise exception here, let the app start anyway
+    # We'll handle the error in the endpoints
 
 @app.route('/')
 def home():
@@ -48,11 +83,14 @@ def documentation():
     doc_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ProjectDescription.md")
     
     # Read the markdown file
-    with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
-        text = f.read()
-    
-    # Convert markdown to HTML
-    html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
+    try:
+        with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
+            text = f.read()
+        
+        # Convert markdown to HTML
+        html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
+    except Exception as e:
+        html = f"<h1>Documentation Not Available</h1><p>Error: {str(e)}</p>"
     
     # Pass the HTML to the template using Markup to prevent escaping
     return render_template('documentation.html', content=Markup(html))
@@ -60,6 +98,10 @@ def documentation():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
+        # Check if model and scaler are loaded
+        if 'model' not in globals() or 'scaler' not in globals():
+            raise RuntimeError("Model or scaler not loaded properly")
+            
         # Get data from request
         if request.is_json:
             # If JSON data
