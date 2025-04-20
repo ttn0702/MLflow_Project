@@ -82,15 +82,55 @@ def documentation():
     # Path to the ProjectDescription.md file
     doc_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ProjectDescription.md")
     
-    # Read the markdown file
-    try:
-        with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
-            text = f.read()
+    # Đối với triển khai trên Hugging Face, nếu không tìm thấy file ở vị trí thường dùng, 
+    # sẽ tạo một mô tả đơn giản
+    if not os.path.exists(doc_path):
+        html = """
+        <h1>MLflow Project Documentation</h1>
+        <p>This is a MLOps project using MLflow for model tracking and deployment.</p>
         
-        # Convert markdown to HTML
-        html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
-    except Exception as e:
-        html = f"<h1>Documentation Not Available</h1><p>Error: {str(e)}</p>"
+        <h2>Main Features</h2>
+        <ul>
+            <li>Train a binary classification model using Random Forest</li>
+            <li>Track experiments with MLflow</li>
+            <li>Perform hyperparameter tuning</li>
+            <li>Register the best model in MLflow Model Registry</li>
+            <li>Serve predictions through a Flask web application</li>
+        </ul>
+        
+        <h2>How to Use</h2>
+        <p>Enter 20 feature values in the home page form and click "Predict" to get a classification result.</p>
+        <p>You can also use the "Randomize" button to generate random feature values.</p>
+        
+        <h2>API Usage</h2>
+        <p>This application also provides a REST API endpoint at <code>/predict</code> that accepts POST requests with JSON data.</p>
+        <pre><code>
+        POST /predict
+        Content-Type: application/json
+        
+        {
+          "features": [0.1, 0.2, 0.3, ..., 0.0]  # 20 feature values
+        }
+        </code></pre>
+        
+        <p>The response will include the predicted class and probability:</p>
+        <pre><code>
+        {
+          "prediction": 1,
+          "probability": 0.832
+        }
+        </code></pre>
+        """
+    else:
+        try:
+            # Read the markdown file
+            with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
+                text = f.read()
+            
+            # Convert markdown to HTML
+            html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
+        except Exception as e:
+            html = f"<h1>Documentation Not Available</h1><p>Error: {str(e)}</p>"
     
     # Pass the HTML to the template using Markup to prevent escaping
     return render_template('documentation.html', content=Markup(html))
