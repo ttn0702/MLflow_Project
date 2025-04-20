@@ -184,7 +184,7 @@ jobs:
         else
           echo "No README.md template found. Please create one in config/huggingface/README.md"
           echo "Creating a basic README.md with required Hugging Face configuration"
-          cat > huggingface_app/README.md << EOF
+          cat > huggingface_app/README.md << 'EOFMARKER'
 ---
 title: MLflow Project App
 emoji: 🧪
@@ -201,7 +201,7 @@ pinned: false
 This is a Flask web application for the MLflow Project, deployed on Hugging Face Spaces.
 
 Please update this README.md by creating your own in config/huggingface/README.md
-EOF
+EOFMARKER
         fi
 
     - name: Deploy to Hugging Face
