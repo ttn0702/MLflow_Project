@@ -203,6 +203,11 @@ jobs:
         # Initialize Git repository in the huggingface_app directory
         cd huggingface_app
         git init
+        
+        # Create initial branch with correct name
+        git checkout -b main
+        
+        # Add files and commit
         git add .
         git commit -m "Deploy MLflow Project to Hugging Face Spaces"
         
@@ -222,6 +227,6 @@ jobs:
           git remote add origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-app"
         fi
         
-        # Push with token authentication
+        # Push with token authentication - make sure we're on main branch
         echo "Pushing to Hugging Face Space..."
         git push -f "https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/mlflow-project-app" main
