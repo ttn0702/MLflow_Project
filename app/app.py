@@ -82,55 +82,49 @@ def documentation():
     # Path to the ProjectDescription.md file
     doc_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ProjectDescription.md")
     
-    # Đối với triển khai trên Hugging Face, nếu không tìm thấy file ở vị trí thường dùng, 
-    # sẽ tạo một mô tả đơn giản
+    # Nếu file không tồn tại, thử các đường dẫn khác
     if not os.path.exists(doc_path):
-        html = """
-        <h1>MLflow Project Documentation</h1>
-        <p>This is a MLOps project using MLflow for model tracking and deployment.</p>
+        alternative_paths = [
+            "ProjectDescription.md",  # Thử tìm ở thư mục hiện tại
+            os.path.join("app", "ProjectDescription.md"),  # Thử tìm trong thư mục app
+            "/app/ProjectDescription.md",  # Thư mục gốc trong Docker
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "ProjectDescription.md")  # Thư mục của app.py
+        ]
         
-        <h2>Main Features</h2>
-        <ul>
-            <li>Train a binary classification model using Random Forest</li>
-            <li>Track experiments with MLflow</li>
-            <li>Perform hyperparameter tuning</li>
-            <li>Register the best model in MLflow Model Registry</li>
-            <li>Serve predictions through a Flask web application</li>
-        </ul>
-        
-        <h2>How to Use</h2>
-        <p>Enter 20 feature values in the home page form and click "Predict" to get a classification result.</p>
-        <p>You can also use the "Randomize" button to generate random feature values.</p>
-        
-        <h2>API Usage</h2>
-        <p>This application also provides a REST API endpoint at <code>/predict</code> that accepts POST requests with JSON data.</p>
-        <pre><code>
-        POST /predict
-        Content-Type: application/json
-        
-        {
-          "features": [0.1, 0.2, 0.3, ..., 0.0]  # 20 feature values
-        }
-        </code></pre>
-        
-        <p>The response will include the predicted class and probability:</p>
-        <pre><code>
-        {
-          "prediction": 1,
-          "probability": 0.832
-        }
-        </code></pre>
-        """
-    else:
-        try:
-            # Read the markdown file
+        for path in alternative_paths:
+            if os.path.exists(path):
+                doc_path = path
+                break
+    
+    try:
+        # Nếu tìm thấy file, đọc nó
+        if os.path.exists(doc_path):
             with codecs.open(doc_path, mode="r", encoding="utf-8") as f:
                 text = f.read()
             
             # Convert markdown to HTML
             html = markdown.markdown(text, extensions=['fenced_code', 'codehilite', 'tables'])
-        except Exception as e:
-            html = f"<h1>Documentation Not Available</h1><p>Error: {str(e)}</p>"
+        else:
+            # Nếu không tìm thấy file, hiển thị thông báo đơn giản
+            html = """
+            <h1>MLflow Project Documentation</h1>
+            <p>Tài liệu đầy đủ không khả dụng, nhưng bạn có thể xem tài liệu trực tuyến tại 
+            <a href="https://github.com/yourusername/MLflow_Project/blob/main/ProjectDescription.md" target="_blank">GitHub Repository</a>.</p>
+            
+            <h2>Tính năng chính:</h2>
+            <ul>
+                <li>Huấn luyện mô hình phân loại nhị phân với RandomForest</li>
+                <li>Sử dụng MLflow theo dõi thí nghiệm</li>
+                <li>Tìm siêu tham số tối ưu</li>
+                <li>Cung cấp API dự đoán</li>
+                <li>Giao diện web thân thiện</li>
+            </ul>
+            
+            <h2>Cách sử dụng</h2>
+            <p>Nhập 20 giá trị đặc trưng và nhấn nút <strong>Predict</strong> để nhận kết quả phân loại.</p>
+            """
+    except Exception as e:
+        html = f"<h1>Documentation Not Available</h1><p>Error: {str(e)}</p>"
     
     # Pass the HTML to the template using Markup to prevent escaping
     return render_template('documentation.html', content=Markup(html))
