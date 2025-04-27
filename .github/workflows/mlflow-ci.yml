@@ -288,15 +288,46 @@ jobs:
         cp requirements.txt mlflow_ui_app/
         grep -q "mlflow" mlflow_ui_app/requirements.txt || echo "mlflow==2.8.1" >> mlflow_ui_app/requirements.txt
         
-        # Copy mlruns data, ensure directory exists and is not empty
+        # Create clean mlruns directory structure for MLflow UI
+        echo "Creating clean mlruns structure"
+        mkdir -p mlflow_ui_app/mlruns
+        
+        # If we have mlruns data, copy important experiment data 
         if [ -d "mlruns" ] && [ "$(ls -A mlruns)" ]; then
-          mkdir -p mlflow_ui_app/mlruns
-          cp -r mlruns/* mlflow_ui_app/mlruns/ || echo "Warning: Failed to copy some mlruns files"
+          echo "Copying experiment data from mlruns directory"
+          
+          # Copy experiment folders but exclude the .trash directory
+          for dir in mlruns/*/; do
+            if [[ "$dir" != "mlruns/.trash/" && -d "$dir" ]]; then
+              echo "Copying experiment: $dir"
+              exp_name=$(basename "$dir")
+              mkdir -p "mlflow_ui_app/mlruns/$exp_name"
+              
+              # Copy metadata files
+              if [ -f "$dir/meta.yaml" ]; then
+                cp "$dir/meta.yaml" "mlflow_ui_app/mlruns/$exp_name/"
+              fi
+              
+              # Copy run folders
+              for run in "$dir"/*/; do
+                if [ -d "$run" ]; then
+                  run_id=$(basename "$run")
+                  echo "  Copying run: $run_id"
+                  mkdir -p "mlflow_ui_app/mlruns/$exp_name/$run_id"
+                  cp -r "$run"/* "mlflow_ui_app/mlruns/$exp_name/$run_id/" || echo "    Warning: Some files could not be copied"
+                fi
+              done
+            fi
+          done
         else
-          echo "Creating minimal mlruns structure for MLflow UI"
+          echo "No existing mlruns data found, creating minimal structure"
           mkdir -p mlflow_ui_app/mlruns/0
           echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlflow_ui_app/mlruns/0/meta.yaml
         fi
+        
+        # Create empty .trash directory to prevent permission issues
+        mkdir -p mlflow_ui_app/mlruns/.trash
+        touch mlflow_ui_app/mlruns/.trash/.gitkeep
         
         # Replace username placeholders in README
         [ -f mlflow_ui_app/README.md ] && sed -i "s/{username}/$HF_USERNAME/g" mlflow_ui_app/README.md
