@@ -292,6 +292,10 @@ jobs:
         echo "Creating clean mlruns structure"
         mkdir -p mlflow_ui_app/mlruns
         
+        # Debug: List all directories in mlruns
+        echo "Available experiment directories:"
+        ls -la mlruns/
+        
         # If we have mlruns data, copy important experiment data 
         if [ -d "mlruns" ] && [ "$(ls -A mlruns)" ]; then
           echo "Copying experiment data from mlruns directory"
@@ -299,13 +303,16 @@ jobs:
           # Copy experiment folders but exclude the .trash directory
           for dir in mlruns/*/; do
             if [[ "$dir" != "mlruns/.trash/" && -d "$dir" ]]; then
-              echo "Copying experiment: $dir"
               exp_name=$(basename "$dir")
+              echo "Copying experiment: $dir (ID: $exp_name)"
               mkdir -p "mlflow_ui_app/mlruns/$exp_name"
               
               # Copy metadata files
               if [ -f "$dir/meta.yaml" ]; then
                 cp "$dir/meta.yaml" "mlflow_ui_app/mlruns/$exp_name/"
+                echo "  Copied meta.yaml"
+              else
+                echo "  No meta.yaml found in $dir"
               fi
               
               # Copy run folders
@@ -314,16 +321,42 @@ jobs:
                   run_id=$(basename "$run")
                   echo "  Copying run: $run_id"
                   mkdir -p "mlflow_ui_app/mlruns/$exp_name/$run_id"
-                  cp -r "$run"/* "mlflow_ui_app/mlruns/$exp_name/$run_id/" || echo "    Warning: Some files could not be copied"
+                  cp -r "$run"/* "mlflow_ui_app/mlruns/$exp_name/$run_id/" || echo "    Warning: Some files could not be copied from $run"
                 fi
               done
             fi
           done
+          
+          # Ensure the classification experiment is included if it exists
+          if [ -d "mlruns/160353641281916972" ]; then
+            echo "Ensuring classification experiment is copied"
+            exp_id="160353641281916972"
+            mkdir -p "mlflow_ui_app/mlruns/$exp_id"
+            
+            # Copy meta.yaml
+            if [ -f "mlruns/$exp_id/meta.yaml" ]; then
+              cp "mlruns/$exp_id/meta.yaml" "mlflow_ui_app/mlruns/$exp_id/"
+            fi
+            
+            # Copy all runs
+            for run in mlruns/$exp_id/*/; do
+              if [ -d "$run" ]; then
+                run_id=$(basename "$run")
+                echo "  Explicitly copying classification run: $run_id"
+                mkdir -p "mlflow_ui_app/mlruns/$exp_id/$run_id"
+                cp -r "$run"/* "mlflow_ui_app/mlruns/$exp_id/$run_id/" || echo "    Warning: Files could not be copied"
+              fi
+            done
+          fi
         else
           echo "No existing mlruns data found, creating minimal structure"
           mkdir -p mlflow_ui_app/mlruns/0
           echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlflow_ui_app/mlruns/0/meta.yaml
         fi
+        
+        # Debug: List copied experiments
+        echo "Copied experiments:"
+        ls -la mlflow_ui_app/mlruns/
         
         # Create empty .trash directory to prevent permission issues
         mkdir -p mlflow_ui_app/mlruns/.trash
