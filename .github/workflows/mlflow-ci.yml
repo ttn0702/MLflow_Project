@@ -348,6 +348,17 @@ jobs:
               fi
             done
           fi
+          
+          # Copy models directory if it exists
+          if [ -d "mlruns/models" ]; then
+            echo "Copying registered models directory"
+            mkdir -p "mlflow_ui_app/mlruns/models"
+            cp -r mlruns/models/* mlflow_ui_app/mlruns/models/ || echo "Warning: Could not copy some model files"
+            
+            # Debug: list copied models
+            echo "Copied models:"
+            ls -la mlflow_ui_app/mlruns/models/
+          fi
         else
           echo "No existing mlruns data found, creating minimal structure"
           mkdir -p mlflow_ui_app/mlruns/0
