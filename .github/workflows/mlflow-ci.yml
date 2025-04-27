@@ -290,16 +290,13 @@ jobs:
         
         # Copy mlruns data, ensure directory exists and is not empty
         if [ -d "mlruns" ] && [ "$(ls -A mlruns)" ]; then
-          cp -r mlruns mlflow_ui_app/
+          mkdir -p mlflow_ui_app/mlruns
+          cp -r mlruns/* mlflow_ui_app/mlruns/ || echo "Warning: Failed to copy some mlruns files"
         else
           echo "Creating minimal mlruns structure for MLflow UI"
           mkdir -p mlflow_ui_app/mlruns/0
           echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlflow_ui_app/mlruns/0/meta.yaml
         fi
-        
-        # Ensure proper permissions for mlruns directory
-        mkdir -p mlflow_ui_app/mlruns/.trash
-        chmod -R 777 mlflow_ui_app/mlruns
         
         # Replace username placeholders in README
         [ -f mlflow_ui_app/README.md ] && sed -i "s/{username}/$HF_USERNAME/g" mlflow_ui_app/README.md

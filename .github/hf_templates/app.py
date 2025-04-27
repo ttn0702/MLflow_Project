@@ -1,23 +1,30 @@
 import os
 import subprocess
 import sys
+import tempfile
+import shutil
 
-# Set MLflow tracking URI to the local mlruns directory
-os.environ["MLFLOW_TRACKING_URI"] = "file:./mlruns"
+# Create a temporary directory for MLflow
+print("Creating temporary directory for MLflow tracking...")
+temp_mlruns_dir = tempfile.mkdtemp(prefix="mlflow_temp_")
+print(f"Temporary MLflow directory: {temp_mlruns_dir}")
 
-# Ensure mlruns directory has right permissions
-print("Setting up permissions for mlruns directory...")
-mlruns_dir = "./mlruns"
-os.makedirs(mlruns_dir, exist_ok=True)
-os.makedirs(os.path.join(mlruns_dir, ".trash"), exist_ok=True)
+# Set MLflow tracking URI to the temporary directory
+os.environ["MLFLOW_TRACKING_URI"] = f"file:{temp_mlruns_dir}"
 
-# Set full permissions for mlruns directory and all subdirectories
-for root, dirs, files in os.walk(mlruns_dir):
-    os.chmod(root, 0o777)
-    for dir in dirs:
-        os.chmod(os.path.join(root, dir), 0o777)
-    for file in files:
-        os.chmod(os.path.join(root, file), 0o666)
+# Copy existing experiment data if available
+if os.path.exists("./mlruns") and os.path.isdir("./mlruns"):
+    print("Copying existing MLflow data to temporary directory...")
+    try:
+        # Copy only experiment directories, not .trash
+        for item in os.listdir("./mlruns"):
+            if item != ".trash" and os.path.isdir(os.path.join("./mlruns", item)):
+                src = os.path.join("./mlruns", item)
+                dst = os.path.join(temp_mlruns_dir, item)
+                shutil.copytree(src, dst)
+        print("Existing data copied successfully")
+    except Exception as e:
+        print(f"Warning: Could not copy existing data: {e}")
 
 # Start MLflow UI on port 7860 (HF default)
 if __name__ == "__main__":
