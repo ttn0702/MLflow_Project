@@ -18,6 +18,15 @@ print(f"Set MLFLOW_TRACKING_URI to: {os.environ['MLFLOW_TRACKING_URI']}")
 # Disable MLflow DB migrations which can cause permission issues
 os.environ["MLFLOW_DISABLE_DB_MIGRATIONS"] = "true"
 
+# Run setup script if it exists
+if os.path.exists("setup_mlflow.py"):
+    print("Running MLflow setup script...")
+    try:
+        subprocess.run([sys.executable, "setup_mlflow.py"], check=True)
+        print("MLflow setup completed successfully")
+    except subprocess.CalledProcessError as e:
+        print(f"Error running MLflow setup: {e}")
+
 # Start MLflow UI on port 7860 (HF default)
 if __name__ == "__main__":
     print("Starting MLflow UI on port 7860...")
