@@ -3,8 +3,8 @@ import mlflow
 import mlflow.sklearn
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from datetime import datetime
 import logging
+import glob
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,9 +16,43 @@ mlflow.set_tracking_uri("file:./mlruns")
 def setup_mlflow():
     logger.info("Setting up MLflow environment...")
     
-    # Create classification experiment if it doesn't exist
-    experiment_name = "classification_experiment"
+    # Quick check for existing data
+    if has_existing_data():
+        logger.info("Found existing MLflow data. No need to create sample data.")
+        return
     
+    # If we reached here, there's no existing data, so we'll create sample data
+    logger.info("No existing MLflow data found. Creating sample data...")
+    create_sample_data()
+    
+    logger.info("MLflow setup completed successfully")
+
+def has_existing_data():
+    # Check if there are any existing experiments besides Default
+    all_experiments = mlflow.search_experiments()
+    if len(all_experiments) > 1:  # More than just the Default experiment
+        return True
+    
+    # Check if there are any existing runs
+    experiment_dirs = glob.glob("./mlruns/[0-9]*")
+    for exp_dir in experiment_dirs:
+        run_dirs = glob.glob(f"{exp_dir}/*/")
+        if run_dirs:
+            return True
+    
+    # Check if models registry contains any models
+    try:
+        models = mlflow.search_registered_models()
+        if models and len(models) > 0:
+            return True
+    except Exception as e:
+        logger.warning(f"Error checking registered models: {e}")
+    
+    return False
+
+def create_sample_data():
+    # Create classification experiment
+    experiment_name = "classification_experiment"
     experiment = mlflow.get_experiment_by_name(experiment_name)
     if experiment is None:
         logger.info(f"Creating experiment: {experiment_name}")
@@ -29,15 +63,6 @@ def setup_mlflow():
     
     # Set the experiment
     mlflow.set_experiment(experiment_name)
-    
-    # Check if model is already registered
-    try:
-        models = mlflow.search_registered_models(filter_string=f"name='BestClassificationModel'")
-        if models and len(models) > 0:
-            logger.info("BestClassificationModel already exists in the registry")
-            return
-    except Exception as e:
-        logger.warning(f"Error checking registered models: {e}")
     
     # Create and log a simple model
     logger.info("Creating and registering sample classification model...")
@@ -73,8 +98,6 @@ def setup_mlflow():
             "sample_model",
             registered_model_name="BestClassificationModel"
         )
-    
-    logger.info("MLflow setup completed successfully")
 
 if __name__ == "__main__":
     try:

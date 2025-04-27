@@ -79,6 +79,14 @@ jobs:
         # Create directories if they don't exist
         mkdir -p data models
         python train.py
+        
+        # Backup mlruns folder to upload as artifact if it exists and is not empty
+        if [ -d "mlruns" ] && [ "$(ls -A mlruns 2>/dev/null)" ]; then
+          echo "Backing up mlruns directory for MLflow UI"
+          zip -r mlruns_backup.zip mlruns
+        else
+          echo "No mlruns directory found or it's empty"
+        fi
 
     - name: Create artifact archive
       run: |
@@ -86,6 +94,8 @@ jobs:
         # Copy model files and scaler
         cp -r models/* artifact_bundle/ || echo "No model files to copy"
         cp data/scaler.joblib artifact_bundle/ || echo "scaler.joblib not found"
+        # Copy mlruns backup for MLflow UI if it exists
+        [ -f mlruns_backup.zip ] && cp mlruns_backup.zip artifact_bundle/
         # Ensure artifact directory is not empty
         if [ -z "$(ls -A artifact_bundle)" ]; then
           echo "Creating placeholder file"
@@ -253,16 +263,39 @@ jobs:
         
         # Check if downloaded_artifacts directory is not empty
         if [ "$(ls -A downloaded_artifacts 2>/dev/null)" ]; then
+          # Copy model files
           cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+          
+          # Move scaler.joblib to data directory if it exists
           if [ -f downloaded_artifacts/scaler.joblib ]; then
             mv downloaded_artifacts/scaler.joblib data/
+          fi
+          
+          # Restore mlruns from backup if it exists
+          if [ -f downloaded_artifacts/mlruns_backup.zip ]; then
+            echo "Restoring mlruns from backup"
+            unzip -o downloaded_artifacts/mlruns_backup.zip -d ./ || echo "Failed to extract mlruns"
+            
+            # Check if mlruns was successfully restored
+            if [ -d "mlruns" ] && [ "$(ls -A mlruns 2>/dev/null)" ]; then
+              echo "MLflow data successfully restored"
+            else
+              echo "Warning: Failed to restore MLflow data properly"
+            fi
+          else
+            echo "No mlruns backup found in artifacts"
           fi
         else
           echo "Warning: downloaded_artifacts directory is empty or does not exist"
         fi
         
+        # Show content of mlruns directory
+        echo "Current mlruns directory structure:"
+        ls -la mlruns/ || echo "mlruns directory is empty or doesn't exist"
+        
         # Create minimal mlruns structure if it doesn't exist
-        if [ ! -d "mlruns" ] || [ -z "$(ls -A mlruns)" ]; then
+        if [ ! -d "mlruns" ] || [ -z "$(ls -A mlruns 2>/dev/null)" ]; then
+          echo "Creating minimal mlruns structure"
           mkdir -p mlruns/0
           echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlruns/0/meta.yaml
         fi
@@ -291,10 +324,37 @@ jobs:
         grep -q "scikit-learn" mlflow_ui_app/requirements.txt || echo "scikit-learn==1.2.2" >> mlflow_ui_app/requirements.txt
         grep -q "numpy" mlflow_ui_app/requirements.txt || echo "numpy==1.23.5" >> mlflow_ui_app/requirements.txt
         
-        # Create minimal mlruns structure for permissions
-        echo "Creating minimal mlruns structure"
+        # Prepare mlruns directory for MLflow UI app
         mkdir -p mlflow_ui_app/mlruns/.trash
         touch mlflow_ui_app/mlruns/.trash/.gitkeep
+        
+        # Copy mlruns directory if it exists and has data
+        if [ -d "mlruns" ] && [ "$(find mlruns -mindepth 1 -not -path "*/\.*" | wc -l)" -gt 0 ]; then
+          echo "Copying MLflow data to UI app"
+          
+          # Copy all experiment directories except .trash
+          for dir in mlruns/*/; do
+            if [[ "$dir" != "mlruns/.trash/" && -d "$dir" ]]; then
+              exp_name=$(basename "$dir")
+              echo "Copying experiment: $exp_name"
+              mkdir -p "mlflow_ui_app/mlruns/$exp_name"
+              cp -r "$dir"/* "mlflow_ui_app/mlruns/$exp_name/" || echo "  Warning: Some files couldn't be copied"
+            fi
+          done
+          
+          # Copy models directory if it exists
+          if [ -d "mlruns/models" ]; then
+            echo "Copying registered models"
+            mkdir -p mlflow_ui_app/mlruns/models
+            cp -r mlruns/models/* mlflow_ui_app/mlruns/models/ || echo "Warning: Some model files couldn't be copied"
+          fi
+          
+          # Show content of copied mlruns
+          echo "Copied MLflow data structure:"
+          find mlflow_ui_app/mlruns -type d -not -path "*/\.*" | sort
+        else
+          echo "No MLflow data to copy, setup_mlflow.py will create sample data if needed"
+        fi
         
         # Replace username placeholders in README
         [ -f mlflow_ui_app/README.md ] && sed -i "s/{username}/$HF_USERNAME/g" mlflow_ui_app/README.md
