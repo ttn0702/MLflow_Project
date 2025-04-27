@@ -26,4 +26,9 @@ tags:
 
 ## Cách sử dụng
 
-Truy cập ứng dụng và nhập các tham số đầu vào để nhận dự đoán từ mô hình. 
+Truy cập ứng dụng và nhập các tham số đầu vào để nhận dự đoán từ mô hình.
+
+## Liên kết
+
+- MLflow UI: [MLflow Tracking](https://huggingface.co/spaces/{username}/mlflow-project-ui)
+- GitHub repository: [MLflow Project](https://github.com/{username}/MLflow_Project) 

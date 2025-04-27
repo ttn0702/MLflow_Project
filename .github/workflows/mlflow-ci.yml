@@ -120,18 +120,12 @@ jobs:
 
     - name: Setup artifacts 
       run: |
-        # Copy model files to appropriate directories
+        # Setup directories and copy artifacts
         mkdir -p models data
         cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
-        if [ -f downloaded_artifacts/scaler.joblib ]; then
-          mv downloaded_artifacts/scaler.joblib data/
-        fi
+        [ -f downloaded_artifacts/scaler.joblib ] && mv downloaded_artifacts/scaler.joblib data/
         
-        # Debug - Show what files were downloaded
-        echo "Downloaded artifact contents:"
-        ls -la downloaded_artifacts/
-        
-        # Debug - Show where model files are now
+        # Show directories for debugging
         echo "Models directory contents:"
         ls -la models/
 
@@ -143,142 +137,180 @@ jobs:
 
     - name: Prepare deployment for Hugging Face
       run: |
-        # Create a directory for deployment
+        # Create deployment directory
         mkdir -p huggingface_app
         
         # Copy app and requirements
         cp -r app/* huggingface_app/ || echo "Error copying app files"
-        cp requirements.txt huggingface_app/ || echo "requirements.txt not found, skipping"
+        cp requirements.txt huggingface_app/ || echo "requirements.txt not found"
         
-        # Đảm bảo tài liệu luôn có sẵn trong thư mục triển khai
-        if [ -f ProjectDescription.md ]; then
-          echo "Copying ProjectDescription.md from root directory"
-          cp ProjectDescription.md huggingface_app/ || echo "Error copying documentation file"
-        elif [ -f app/ProjectDescription.md ]; then
-          echo "Copying ProjectDescription.md from app directory"
-          cp app/ProjectDescription.md huggingface_app/ || echo "Error copying documentation file from app directory"
-        else
-          echo "ProjectDescription.md not found in root or app directory"
+        # Copy README from templates
+        if [ -f .github/hf_templates/app_README.md ]; then
+          cp .github/hf_templates/app_README.md huggingface_app/README.md
         fi
         
-        # Create and set proper permissions for model and data directories
-        mkdir -p huggingface_app/models
-        mkdir -p huggingface_app/data
-        chmod -R 755 huggingface_app/models
-        chmod -R 755 huggingface_app/data
+        # Copy Dockerfile
+        if [ -f .github/hf_templates/app_Dockerfile ]; then
+          cp .github/hf_templates/app_Dockerfile huggingface_app/Dockerfile
+        fi
         
-        # Rename model file if it exists with a different name
+        # Copy .gitattributes if exists
+        if [ -f .github/hf_templates/.gitattributes ]; then
+          cp .github/hf_templates/.gitattributes huggingface_app/
+        fi
+        
+        # Copy documentation if available
+        if [ -f ProjectDescription.md ]; then
+          cp ProjectDescription.md huggingface_app/
+        elif [ -f app/ProjectDescription.md ]; then
+          cp app/ProjectDescription.md huggingface_app/
+        fi
+        
+        # Handle model files
+        mkdir -p huggingface_app/models huggingface_app/data
+        chmod -R 755 huggingface_app/models huggingface_app/data
+        
         if [ -f models/model.joblib ]; then
           cp models/model.joblib huggingface_app/models/best_model.joblib
         elif [ -f models/best_model.pkl ]; then
           cp models/best_model.pkl huggingface_app/models/best_model.joblib
         else
-          # Copy all model files to ensure we get the right one
-          cp -r models/* huggingface_app/models/ || echo "No model files to copy"
-          
-          # Create a placeholder model if no model exists (for testing)
-          if [ -z "$(ls -A huggingface_app/models)" ]; then
-            echo "No model files found. Creating placeholder model file."
-            echo "Placeholder model" > huggingface_app/models/best_model.joblib
-          fi
+          cp -r models/* huggingface_app/models/ || echo "No model files found"
+          # Create placeholder if needed
+          [ -z "$(ls -A huggingface_app/models)" ] && echo "Placeholder model" > huggingface_app/models/best_model.joblib
         fi
         
         # Copy scaler
-        cp -r data/scaler.joblib huggingface_app/data/ || echo "No scaler.joblib to copy"
+        cp data/scaler.joblib huggingface_app/data/ || echo "No scaler.joblib to copy"
         
-        # Debug - Show what will be deployed
-        echo "Hugging Face app contents:"
-        ls -la huggingface_app/
-        echo "Models in Hugging Face app:"
-        ls -la huggingface_app/models/ || echo "No models directory"
-        echo "Data in Hugging Face app:"
-        ls -la huggingface_app/data/ || echo "No data directory"
-        
-        # Copy Hugging Face config files
-        if [ -d "config/huggingface" ]; then
-          echo "Using existing Hugging Face config files from config/huggingface/"
-          cp -r config/huggingface/* huggingface_app/
-        else
-          echo "No config files found in config/huggingface/, using default templates"
-          # Use default templates from .github/hf_templates if available
-          if [ -d ".github/hf_templates" ]; then
-            echo "Using templates from .github/hf_templates/"
-            cp -r .github/hf_templates/* huggingface_app/
-          else
-            echo "No template files found. Please add config files to config/huggingface/ directory"
-            exit 1
-          fi
-        fi
+        # Replace username placeholder in README
+        [ -f huggingface_app/README.md ] && sed -i "s/{username}/$HF_USERNAME/g" huggingface_app/README.md
 
     - name: Deploy to Hugging Face
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
         HF_USERNAME: ${{ secrets.HF_USERNAME }}
       run: |
-        # Install required tools
+        # Setup tools and environment
         pip install huggingface_hub
         apt-get update && apt-get install -y git-lfs
-        
-        # Configure Git for Hugging Face
         git config --global user.email "${{ secrets.EMAIL_HUGGINGFACE }}"
         git config --global user.name "${{ secrets.USERNAME_HUGGINGFACE }}"
         
-        # Login to Hugging Face using CLI
-        echo "Logging in to Hugging Face..."
+        # Login and validate
         huggingface-cli login --token $HF_TOKEN
+        [ -z "$HF_USERNAME" ] && echo "Error: HF_USERNAME not set in secrets" && exit 1
         
-        # Check if the HF_USERNAME is set
-        if [ -z "$HF_USERNAME" ]; then
-          echo "Error: HF_USERNAME is not set in repository secrets!"
-          exit 1
-        fi
+        # Create Space if needed
+        huggingface-cli repo list --spaces --output json | grep -q "\"$HF_USERNAME/mlflow-project-app\"" || \
+          huggingface-cli repo create mlflow-project-app --type space --space-sdk docker
         
-        # Check if Space already exists
-        echo "Checking if Space already exists..."
-        SPACE_EXISTS=$(huggingface-cli repo list --spaces --output json | grep -c "\"$HF_USERNAME/mlflow-project-app\"" || echo "0")
-        
-        # Initialize Git repository in the huggingface_app directory
+        # Setup Git repository and LFS
         cd huggingface_app
         git init
-        
-        # Setup Git LFS
         git lfs install
-        
-        # Setup LFS tracking patterns for binary files
-        echo "Setting up Git LFS tracking patterns..."
-        git lfs track "*.joblib"
-        git lfs track "*.pkl"
-        git lfs track "*.h5"
-        git lfs track "*.onnx"
-        git lfs track "*.bin"
-        
-        # Make sure .gitattributes is tracked
+        git lfs track "*.joblib" "*.pkl" "*.h5" "*.onnx" "*.bin"
         git add .gitattributes
-        
-        # Create initial branch with correct name
         git checkout -b main
-        
-        # Add files and commit
-        echo "Adding files to Git repository..."
         git add .
         git commit -m "Deploy MLflow Project to Hugging Face Spaces"
         
-        # Create or update Hugging Face Space
-        if [ "$SPACE_EXISTS" -eq "0" ]; then
-          echo "Creating new Hugging Face Space: $HF_USERNAME/mlflow-project-app"
-          huggingface-cli repo create mlflow-project-app --type space --space-sdk docker
-        else
-          echo "Space already exists, will update it: $HF_USERNAME/mlflow-project-app"
-        fi
-        
         # Setup remote and push
-        echo "Setting up Git remote and pushing to Hugging Face..."
-        if git remote | grep -q "^origin$"; then
-          git remote set-url origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-app"
+        git remote add origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-app"
+        git push -f "https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/mlflow-project-app" main
+
+  deploy-mlflow-ui:
+    runs-on: ubuntu-latest
+    needs: train-model
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: model-artifacts
+        path: downloaded_artifacts
+
+    - name: Setup artifacts and mlruns
+      run: |
+        # Setup directories and copy artifacts
+        mkdir -p models data mlruns
+        cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+        [ -f downloaded_artifacts/scaler.joblib ] && mv downloaded_artifacts/scaler.joblib data/
+        
+        # Create minimal mlruns structure if it doesn't exist
+        [ ! -d "mlruns" ] && mkdir -p mlruns/0 && echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlruns/0/meta.yaml
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install huggingface_hub mlflow
+
+    - name: Prepare MLflow UI deployment
+      run: |
+        # Create deployment directory
+        mkdir -p mlflow_ui_app
+        
+        # Copy template files
+        cp .github/hf_templates/app.py mlflow_ui_app/
+        [ -f .github/hf_templates/mlflow_ui_Dockerfile ] && cp .github/hf_templates/mlflow_ui_Dockerfile mlflow_ui_app/Dockerfile
+        [ -f .github/hf_templates/mlflow_ui_README.md ] && cp .github/hf_templates/mlflow_ui_README.md mlflow_ui_app/README.md
+        cp .github/hf_templates/.gitattributes mlflow_ui_app/
+        
+        # Copy or prepare requirements
+        if [ -f .github/hf_templates/mlflow_ui_requirements.txt ]; then
+          cp .github/hf_templates/mlflow_ui_requirements.txt mlflow_ui_app/requirements.txt
+        elif [ -f requirements.txt ]; then
+          cp requirements.txt mlflow_ui_app/
+          # Ensure MLflow is in requirements
+          grep -q "mlflow" mlflow_ui_app/requirements.txt || echo "mlflow==2.8.1" >> mlflow_ui_app/requirements.txt
         else
-          git remote add origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-app"
+          # Create minimal requirements
+          echo "mlflow==2.8.1" > mlflow_ui_app/requirements.txt
+          echo "scikit-learn>=1.0.0" >> mlflow_ui_app/requirements.txt
+          echo "pandas>=1.3.0" >> mlflow_ui_app/requirements.txt
+          echo "numpy>=1.20.0" >> mlflow_ui_app/requirements.txt
         fi
         
-        # Push with token authentication - make sure we're on main branch
-        echo "Pushing to Hugging Face Space..."
-        git push -f "https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/mlflow-project-app" main
+        # Copy mlruns data
+        cp -r mlruns mlflow_ui_app/
+        
+        # Replace username placeholders in README
+        [ -f mlflow_ui_app/README.md ] && sed -i "s/{username}/$HF_USERNAME/g" mlflow_ui_app/README.md
+
+    - name: Deploy MLflow UI to Hugging Face
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        HF_USERNAME: ${{ secrets.HF_USERNAME }}
+      run: |
+        # Install and configure tools
+        pip install huggingface_hub
+        apt-get update && apt-get install -y git-lfs
+        git config --global user.email "${{ secrets.EMAIL_HUGGINGFACE }}"
+        git config --global user.name "${{ secrets.USERNAME_HUGGINGFACE }}"
+        
+        # Login to Hugging Face
+        huggingface-cli login --token $HF_TOKEN
+        [ -z "$HF_USERNAME" ] && echo "Error: HF_USERNAME not set in secrets" && exit 1
+        
+        # Create Space if needed
+        huggingface-cli repo list --spaces --output json | grep -q "\"$HF_USERNAME/mlflow-project-ui\"" || \
+          huggingface-cli repo create mlflow-project-ui --type space --space-sdk docker
+        
+        # Setup and push Git repository
+        cd mlflow_ui_app
+        git init
+        git lfs install
+        git add .gitattributes
+        git checkout -b main
+        git add .
+        git commit -m "Deploy MLflow UI"
+        git push -f "https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/mlflow-project-ui" main
