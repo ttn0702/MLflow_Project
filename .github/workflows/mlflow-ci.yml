@@ -209,8 +209,9 @@ jobs:
         huggingface-cli login --token $HF_TOKEN
         [ -z "$HF_USERNAME" ] && echo "Error: HF_USERNAME not set in secrets" && exit 1
         
-        # Create Space if needed
-        huggingface-cli repo create --type space $HF_USERNAME/mlflow-project-app --private false
+        # Try creating the space silently first, ignore errors if it already exists
+        echo "Creating or checking Hugging Face Space..."
+        huggingface-cli repo create "spaces/$HF_USERNAME/mlflow-project-app" --type space || echo "Space might already exist"
         
         # Setup Git repository and LFS
         cd huggingface_app
@@ -314,8 +315,9 @@ jobs:
         huggingface-cli login --token $HF_TOKEN
         [ -z "$HF_USERNAME" ] && echo "Error: HF_USERNAME not set in secrets" && exit 1
         
-        # Create Space if needed
-        huggingface-cli repo create --type space $HF_USERNAME/mlflow-project-ui --private false
+        # Try creating the space silently first, ignore errors if it already exists
+        echo "Creating or checking Hugging Face Space for MLflow UI..."
+        huggingface-cli repo create "spaces/$HF_USERNAME/mlflow-project-ui" --type space || echo "Space might already exist"
         
         # Setup and push Git repository
         cd mlflow_ui_app
