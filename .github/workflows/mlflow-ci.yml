@@ -122,12 +122,20 @@ jobs:
       run: |
         # Setup directories and copy artifacts
         mkdir -p models data
-        cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
-        [ -f downloaded_artifacts/scaler.joblib ] && mv downloaded_artifacts/scaler.joblib data/
+        
+        # Check if downloaded_artifacts directory is not empty
+        if [ "$(ls -A downloaded_artifacts 2>/dev/null)" ]; then
+          cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+          if [ -f downloaded_artifacts/scaler.joblib ]; then
+            mv downloaded_artifacts/scaler.joblib data/
+          fi
+        else
+          echo "Warning: downloaded_artifacts directory is empty or does not exist"
+        fi
         
         # Show directories for debugging
         echo "Models directory contents:"
-        ls -la models/
+        ls -la models/ || echo "Models directory is empty"
 
     - name: Install dependencies
       run: |
@@ -193,7 +201,7 @@ jobs:
       run: |
         # Setup tools and environment
         pip install huggingface_hub
-        apt-get update && apt-get install -y git-lfs
+        sudo apt-get update && sudo apt-get install -y git-lfs
         git config --global user.email "${{ secrets.EMAIL_HUGGINGFACE }}"
         git config --global user.name "${{ secrets.USERNAME_HUGGINGFACE }}"
         
@@ -202,8 +210,7 @@ jobs:
         [ -z "$HF_USERNAME" ] && echo "Error: HF_USERNAME not set in secrets" && exit 1
         
         # Create Space if needed
-        huggingface-cli repo list --spaces --output json | grep -q "\"$HF_USERNAME/mlflow-project-app\"" || \
-          huggingface-cli repo create mlflow-project-app --type space --space-sdk docker
+        huggingface-cli repo create --type space $HF_USERNAME/mlflow-project-app --private false
         
         # Setup Git repository and LFS
         cd huggingface_app
@@ -242,11 +249,22 @@ jobs:
       run: |
         # Setup directories and copy artifacts
         mkdir -p models data mlruns
-        cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
-        [ -f downloaded_artifacts/scaler.joblib ] && mv downloaded_artifacts/scaler.joblib data/
+        
+        # Check if downloaded_artifacts directory is not empty
+        if [ "$(ls -A downloaded_artifacts 2>/dev/null)" ]; then
+          cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+          if [ -f downloaded_artifacts/scaler.joblib ]; then
+            mv downloaded_artifacts/scaler.joblib data/
+          fi
+        else
+          echo "Warning: downloaded_artifacts directory is empty or does not exist"
+        fi
         
         # Create minimal mlruns structure if it doesn't exist
-        [ ! -d "mlruns" ] && mkdir -p mlruns/0 && echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlruns/0/meta.yaml
+        if [ ! -d "mlruns" ] || [ -z "$(ls -A mlruns)" ]; then
+          mkdir -p mlruns/0
+          echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlruns/0/meta.yaml
+        fi
 
     - name: Install dependencies
       run: |
@@ -269,8 +287,14 @@ jobs:
         cp requirements.txt mlflow_ui_app/
         grep -q "mlflow" mlflow_ui_app/requirements.txt || echo "mlflow==2.8.1" >> mlflow_ui_app/requirements.txt
         
-        # Copy mlruns data
-        cp -r mlruns mlflow_ui_app/
+        # Copy mlruns data, ensure directory exists and is not empty
+        if [ -d "mlruns" ] && [ "$(ls -A mlruns)" ]; then
+          cp -r mlruns mlflow_ui_app/
+        else
+          echo "Creating minimal mlruns structure for MLflow UI"
+          mkdir -p mlflow_ui_app/mlruns/0
+          echo '{"experiment_id": "0", "name": "Default", "artifact_location": "mlruns/0", "lifecycle_stage": "active"}' > mlflow_ui_app/mlruns/0/meta.yaml
+        fi
         
         # Replace username placeholders in README
         [ -f mlflow_ui_app/README.md ] && sed -i "s/{username}/$HF_USERNAME/g" mlflow_ui_app/README.md
@@ -282,7 +306,7 @@ jobs:
       run: |
         # Install and configure tools
         pip install huggingface_hub
-        apt-get update && apt-get install -y git-lfs
+        sudo apt-get update && sudo apt-get install -y git-lfs
         git config --global user.email "${{ secrets.EMAIL_HUGGINGFACE }}"
         git config --global user.name "${{ secrets.USERNAME_HUGGINGFACE }}"
         
@@ -291,8 +315,7 @@ jobs:
         [ -z "$HF_USERNAME" ] && echo "Error: HF_USERNAME not set in secrets" && exit 1
         
         # Create Space if needed
-        huggingface-cli repo list --spaces --output json | grep -q "\"$HF_USERNAME/mlflow-project-ui\"" || \
-          huggingface-cli repo create mlflow-project-ui --type space --space-sdk docker
+        huggingface-cli repo create --type space $HF_USERNAME/mlflow-project-ui --private false
         
         # Setup and push Git repository
         cd mlflow_ui_app
