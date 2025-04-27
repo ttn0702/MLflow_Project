@@ -803,3 +803,88 @@ Việc áp dụng CI/CD cho dự án MLOps mang lại nhiều lợi ích:
 5. **Triển khai liên tục**: Triển khai mô hình mới một cách tự động
 
 Qua việc triển khai CI/CD, dự án MLOps của tôi đảm bảo tính liên tục trong toàn bộ vòng đời của mô hình, từ phát triển đến triển khai và giám sát. 
+
+### 12.6. Triển khai MLflow UI trên Hugging Face
+
+Ngoài việc triển khai ứng dụng dự đoán, tôi còn triển khai MLflow UI lên Hugging Face để theo dõi và quản lý các thí nghiệm và mô hình.
+
+#### 12.6.1. Tạo Job deploy-mlflow-ui
+
+Tôi đã thêm job thứ tư vào CI/CD pipeline để triển khai MLflow UI:
+
+```yaml
+deploy-mlflow-ui:
+  runs-on: ubuntu-latest
+  needs: train-model
+  if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+  
+  steps:
+  - uses: actions/checkout@v4
+  
+  - name: Set up Python
+    uses: actions/setup-python@v4
+    with:
+      python-version: '3.10'
+      
+  - name: Download model artifacts
+    uses: actions/download-artifact@v4
+    with:
+      name: model-artifacts
+      path: downloaded_artifacts
+      
+  - name: Setup artifacts and mlruns
+    run: |
+      # Setup directories and copy artifacts
+      mkdir -p models data mlruns
+      
+      # Copy model artifacts and restore mlruns data
+      # ...
+      
+  - name: Prepare MLflow UI deployment
+    run: |
+      # Create deployment directory and copy templates
+      # Set up environment and dependencies
+      # Copy MLflow data to the deployment app
+      # ...
+  
+  - name: Deploy MLflow UI to Hugging Face
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_USERNAME: ${{ secrets.HF_USERNAME }}
+    run: |
+      # Deploy the MLflow UI app to Hugging Face Space
+      # ...
+```
+
+#### 12.6.2. Cách thức hoạt động của MLflow UI trên Hugging Face
+
+MLflow UI được triển khai lên Hugging Face Spaces thông qua các bước chính:
+
+1. **Sao lưu dữ liệu MLflow**: Trong quá trình huấn luyện, dữ liệu MLflow (experiments, runs, models) được sao lưu và lưu trữ dưới dạng artifact.
+
+2. **Khôi phục dữ liệu**: Job deploy-mlflow-ui tải artifact và khôi phục dữ liệu MLflow.
+
+3. **Chuẩn bị ứng dụng MLflow UI**:
+   - Copy các template và file cấu hình
+   - Đảm bảo các dependencies được cài đặt
+   - Sao chép dữ liệu MLflow vào ứng dụng
+
+4. **Fallback mechanism**: Nếu không có dữ liệu MLflow từ quá trình huấn luyện, script `setup_mlflow.py` sẽ tạo dữ liệu mẫu để đảm bảo MLflow UI không trống.
+
+5. **Deploy lên Hugging Face**: Ứng dụng MLflow UI được đẩy lên Hugging Face Space sử dụng Git và Git LFS để quản lý các file nhị phân.
+
+#### 12.6.3. Lợi ích của MLflow UI trên Hugging Face
+
+Việc triển khai MLflow UI lên Hugging Face mang lại nhiều lợi ích:
+
+1. **Truy cập từ xa**: Dễ dàng truy cập MLflow UI từ bất kỳ đâu mà không cần chạy server local.
+
+2. **Chia sẻ**: Có thể chia sẻ kết quả thí nghiệm và thông tin mô hình với đồng nghiệp hoặc cộng đồng.
+
+3. **Theo dõi**: Theo dõi quá trình huấn luyện và hiệu suất các mô hình theo thời gian thực.
+
+4. **Tích hợp**: Tạo liên kết giữa ứng dụng dự đoán và thông tin mô hình để nâng cao tính minh bạch.
+
+5. **Quản lý phiên bản**: Dễ dàng theo dõi và quản lý các phiên bản khác nhau của mô hình.
+
+MLflow UI trên Hugging Face giúp hoàn thiện vòng đời MLOps bằng cách cung cấp một nền tảng quản lý và theo dõi thí nghiệm mà bất kỳ ai cũng có thể truy cập, tăng cường tính minh bạch và khả năng tái tạo trong quá trình phát triển mô hình. 
