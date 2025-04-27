@@ -7,6 +7,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Ensure mlruns directory has proper permissions
+RUN mkdir -p mlruns/.trash && chmod -R 777 mlruns
+
 # Mở cổng 7860 - cổng mặc định của Hugging Face Spaces
 EXPOSE 7860
 
