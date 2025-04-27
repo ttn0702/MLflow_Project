@@ -135,7 +135,14 @@ jobs:
         
         # Check if downloaded_artifacts directory is not empty
         if [ "$(ls -A downloaded_artifacts 2>/dev/null)" ]; then
-          cp -r downloaded_artifacts/* models/ || echo "No files to copy to models directory"
+          # Copy model files but skip mlruns_backup.zip
+          for file in downloaded_artifacts/*; do
+            if [[ "$file" != *"mlruns_backup.zip" ]]; then
+              cp -r "$file" models/ || echo "Could not copy $file to models directory"
+            fi
+          done
+          
+          # Handle scaler.joblib separately
           if [ -f downloaded_artifacts/scaler.joblib ]; then
             mv downloaded_artifacts/scaler.joblib data/
           fi
@@ -227,8 +234,20 @@ jobs:
         cd huggingface_app
         git init
         git lfs install
-        git lfs track "*.joblib" "*.pkl" "*.h5" "*.onnx" "*.bin"
+        
+        # Configure Git LFS to track binary files
+        git lfs track "*.joblib" "*.pkl" "*.h5" "*.onnx" "*.bin" "*.zip" "*.gz" "*.tar"
+        
+        # Make sure .gitattributes is tracked by git
         git add .gitattributes
+        
+        # Check for and remove any binary files that shouldn't be deployed
+        if [ -f "models/mlruns_backup.zip" ]; then
+          echo "Removing mlruns_backup.zip from models directory"
+          rm models/mlruns_backup.zip
+        fi
+        
+        # Checkout, add files, commit and push
         git checkout -b main
         git add .
         git commit -m "Deploy MLflow Project to Hugging Face Spaces"
@@ -324,6 +343,9 @@ jobs:
         grep -q "scikit-learn" mlflow_ui_app/requirements.txt || echo "scikit-learn==1.2.2" >> mlflow_ui_app/requirements.txt
         grep -q "numpy" mlflow_ui_app/requirements.txt || echo "numpy==1.23.5" >> mlflow_ui_app/requirements.txt
         
+        # Remove any leftover backup files
+        rm -f models/mlruns_backup.zip downloaded_artifacts/mlruns_backup.zip 2>/dev/null || true
+        
         # Prepare mlruns directory for MLflow UI app
         mkdir -p mlflow_ui_app/mlruns/.trash
         touch mlflow_ui_app/mlruns/.trash/.gitkeep
@@ -378,12 +400,23 @@ jobs:
         echo "Creating or checking Hugging Face Space for MLflow UI..."
         huggingface-cli repo create "spaces/$HF_USERNAME/mlflow-project-ui" --type space || echo "Space might already exist"
         
-        # Setup and push Git repository
+        # Setup Git repository and LFS
         cd mlflow_ui_app
         git init
         git lfs install
+        
+        # Configure Git LFS to track binary files
+        git lfs track "*.joblib" "*.pkl" "*.h5" "*.onnx" "*.bin" "*.zip" "*.gz" "*.tar"
         git add .gitattributes
+        
+        # Final check for binary files that shouldn't be deployed
+        find . -name "mlruns_backup.zip" -exec rm -f {} \; 2>/dev/null || true
+        
+        # Checkout, add all files and commit
         git checkout -b main
         git add .
         git commit -m "Deploy MLflow UI"
+        
+        # Push to Hugging Face
+        git remote add origin "https://huggingface.co/spaces/$HF_USERNAME/mlflow-project-ui"
         git push -f "https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/mlflow-project-ui" main
